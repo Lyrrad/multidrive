@@ -30,7 +30,7 @@ Downloads "test.txt" in the root directory of Google Drive to the local computer
 ## Current Functionality
 
 Upload/Download to Google Drive
-Download from OneDrive.
+Upload/Download from OneDrive. (Can only upload to root onedrive folder)
 
 ## Requirements
 
@@ -60,7 +60,6 @@ Create a file onedrive_client_secrets.json with the following information (inser
 ## Planned features
 Support for Amazon Cloud Drive and Dropbox is planned.
 Support for moving files from one service to another is planned.
-Support for uploading to OneDrive is planned.
 Support for downloading, uploading, and moving folders is planned.
 Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive.
 Support for overwriting if file already.
