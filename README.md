@@ -5,7 +5,7 @@
 
 Basic utilities to upload and download from various cloud storage services.
 
-Currently this only supports Google Drive upload and download operations.
+Currently support for Google Drive and Microsoft OneDrive upload and download operations is implemented.
 
 This is in alpha.
 
@@ -13,7 +13,7 @@ This is in alpha.
 
     ./multidrive -s googledrive -a upload -l example.txt
 
-Uploads "test.txt" to the root  directory on Google Drive.
+Uploads "test.txt" to the root directory on Google Drive.
 
     ./multidrive -s googledrive -a upload -l example.txt -r examplefolder
 
@@ -29,8 +29,18 @@ Downloads "test.txt" in the root directory of Google Drive to the local computer
 
 ## Current Functionality
 
-Upload/Download to Google Drive
-Upload/Download from OneDrive. (Can only upload to root onedrive folder)
+Google Drive:
+Upload file to any remote folder
+Download files and folders to any local folder.
+List remote files/folders.
+(Cannot upload folders yet)
+
+OneDrive
+Upload file to any remote folder
+Download file to local folder.
+(Cannot list files/folders yet)
+(Cannot download folders yet)
+(Cannot upload folders yet)
 
 ## Requirements
 
@@ -59,10 +69,11 @@ Create a file onedrive_client_secrets.json with the following information (inser
 
 ## Planned features
 Support for Amazon Cloud Drive and Dropbox is planned.
-Support for moving files from one service to another is planned.
-Support for downloading, uploading, and moving folders is planned.
+Support for moving files and folders from one service to another.
 Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive.
-Support for overwriting if file already.
+Support for handling quota errors.
+When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
+Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
 
 ## Licence 
 

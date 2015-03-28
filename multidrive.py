@@ -61,11 +61,11 @@ def main():
 	# parser.add_argument('-m', '--moveFile', help="Path to File to move")
 	# parser.add_argument('-s', '--moveFiles', nargs= '*', help="Path to Files to move")
 	parser.add_argument('-s', '--source', nargs=1, required=True, help='set primary service for this command. Valid values are onedrive and googledrive')
-	parser.add_argument('-a', '--action', nargs=1, required=True, help='action to perform, valid actions include download, upload, and copy')
+	parser.add_argument('-a', '--action', nargs=1, required=True, help='action to perform, valid actions include download, upload, list, and copy')
 	parser.add_argument('-d', '--destination', nargs=1, help='set secondary service for this command, Valid values are onedrive and googledrive.  Only valid with copy command')
 	parser.add_argument('-l', '--local', nargs=1, help='path of local file or folder')
 	parser.add_argument('-r', '--remote', nargs=1, help='path of remote file or folder')
-	parser.add_argument('-c', '--createfolder', help='enable creation of remote folders', action='store_true')
+	parser.add_argument('-c', '--createfolder', help='enable creation of necessary remote folders', action='store_true')
 	parser.add_argument('-e', '--secondaryremote', nargs=1, help='path secondary remote file or folder (for copy action)')
 	parser.add_argument('-o', '--overwrite', help='enable overwriting of files', action='store_true')
 	# parser.add_argument('-p', '--parent', help="parent folder for Google Drive")
@@ -89,16 +89,35 @@ def main():
 		destination = None
 		if args.remote is not None:
 			destination = args.remote[0]
-		storage_service.upload(args.local[0], destination=destination, create_folder=args.createfolder, overwrite=overwrite)
+		storage_service.upload(args.local[0], destination=destination, create_folder=args.createfolder, overwrite=args.overwrite)
 		pass
 	elif args.action[0].lower() == "download":
 		if args.remote is None:
-			raise ValueError("Please specify a remote file to download.")
+			raise ValueError("Please specify a remote file or folder to download.")
 		local_path = None
 		if args.local is not None:
 			local_path = args.local[0]
-
-		storage_service.download(args.remote[0], local_path)
+		if storage_service.is_folder(args.remote[0]) is True:
+			remote_files = storage_service.list_folder(args.remote[0])
+			for (cur_file, path) in remote_files:
+				destination = None
+				if local_path is None:
+					if path is None or len(path) == 0:
+						destination = None
+					else:
+						destination = os.path.join(*path)
+				else:
+					destination = os.path.join(local_path, *path)
+				storage_service.download_item(cur_file, destination=destination, overwrite=args.overwrite)
+		else:
+			storage_service.download(args.remote[0], local_path, overwrite=args.overwrite)
+	elif args.action[0].lower() == "list":
+		if args.remote is None:
+			raise ValueError("Please specify a remote folder to list.")
+		if storage_service.is_folder(args.remote[0]) is False:
+			raise ValueError("Remote path is either does not exist or is not a folder")
+		for (curFile, path) in storage_service.list_folder(args.remote[0]):
+			print "{}/{}".format(str(path), curFile['title'])
 	elif args.action[0].lower() == "copy":
 		raise ValueError("Copy support is not yet implemented")
 	else:

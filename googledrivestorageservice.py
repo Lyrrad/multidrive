@@ -16,7 +16,7 @@
 
 import requests
 import json
-from dateutil.parser import parse
+import dateutil.parser
 import datetime
 import argparse
 import sys
@@ -50,6 +50,8 @@ import time
 
 from storageservice import StorageService
 
+class ItemDoesNotExistError(RuntimeError):
+	pass
 
 class UTC(datetime.tzinfo):
 	"""UTC"""
@@ -71,22 +73,55 @@ class GoogleDriveStorageService(StorageService):
 		print "Authorize Google Drive Storage Service"
 		self.get_google_auth()
 
-	def upload(self, file_name, destination=None, modified_time= None, create_folder = False):
+	def upload(self, file_path, destination=None, modified_time= None, create_folder = False, overwrite = False):
 		print "Upload {} Google Drive Storage Service".format(file_name)
-		self.upload_file(file_name, folder=destination, modified_time=modified_time, create_folder = create_folder)
+		self.upload_file(file_path, folder=destination, modified_time=modified_time, create_folder = create_folder, overwrite = overwrite)
 		
 
 
-	def download(self, file_path, destination=None):
+	def download(self, file_path, destination=None, overwrite=False):
 		print "Download {} Google Drive Storage Service".format(file_path)
-		self.download_file(file_path, destination)
+		self.download_file(file_path, destination=destination, overwrite=overwrite)
 
 	def is_folder(self, folder_path):
-		pass
+		if folder_path is None or folder_path == "":
+			# Interpret as root
+			return True
+		try:
+			folder_result = self.get_folder(folder_path)
+		except ItemDoesNotExistError:
+			return False
+
+		return True
 		
-	
 	def list_folder(self, folder_path):
-		pass
+		base_folder = None
+		if folder_path is None or folder_path == "":
+			base_folder = 'root'
+		else:
+			base_folder = self.get_folder(folder_path)
+		
+		folder_list = self.get_folder_listing(base_folder, [])
+		return folder_list
+
+	def get_folder_listing(self, cur_folder, path_list):
+
+
+		drive = GoogleDrive(self.__google_auth__)
+		result_list = []
+		file_list = drive.ListFile({'q': "'{}' in parents and trashed=false ".format(cur_folder)}).GetList()
+		file_list.sort(key=lambda cur_file: cur_file['title'])
+		for cur_file in file_list:
+			result_list.append((cur_file, path_list))
+			if cur_file['mimeType'] == 'application/vnd.google-apps.folder':
+				new_list = list(path_list)
+				new_list.append(cur_file['title'])
+				result_list.extend(self.get_folder_listing(cur_file['id'], new_list))
+
+		return result_list
+		
+
+
 
 	def get_google_auth(self):
 		self.__google_auth__ = None
@@ -119,16 +154,55 @@ class GoogleDriveStorageService(StorageService):
 			print "Successfully refreshed token"
 
 
-	def download_file(self, file_path, destination=None):
+	def download_file(self, file_path, destination=None, overwrite=False):
 		self.get_refresh_token()
 		cur_file_info = self.get_file(file_path)
+
+		if cur_file_info['mimeType'] == "application/vnd.google-apps.folder":
+			raise RuntimeError("Path is a folder")
+
 		drive = GoogleDrive(self.__google_auth__)
 		cur_file = drive.CreateFile({'id': cur_file_info['id']})
-		cur_file.GetContentFile(cur_file_info['title'])
+		local_path = cur_file_info['title']
+		if destination is not None:
+			local_path = os.path.join(destination, local_path)
+		if os.path.isdir(local_path):
+			raise RuntimeError("Local destination is a folder")
+		if overwrite is False and os.path.isfile(local_path):
+			raise RuntimeError("Local file {} exists.  Enable overwrite option to continue.".format(local_path))
+		cur_file.GetContentFile(local_path)
+		# Set modified time too!
+		modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
+		os.utime(local_path, (time.mktime(modified_date.timetuple()),time.mktime(modified_date.timetuple())))
 
 
-	def upload_file(self, file_path, folder=None, modified_time=None, create_folder = False):
+	def download_item(self, cur_file, destination=None, overwrite=False):
+		
+		local_path = cur_file['title']
+		if destination is not None:
+			local_path = os.path.join(destination, local_path)
+
+		
+		if cur_file['mimeType'] == "application/vnd.google-apps.folder":
+			if not os.path.exists(local_path):
+				os.mkdir(local_path)
+			return
+
 		self.get_refresh_token()
+		drive = GoogleDrive(self.__google_auth__)
+		# cur_file = drive.CreateFile({'id': cur_file['id']})
+		
+		if os.path.isdir(local_path):
+			raise RuntimeError("Local destination is a folder")
+		if overwrite is False and os.path.isfile(local_path):
+			raise RuntimeError("Local file {} exists.  Enable overwrite option to continue.".format(local_path))
+		cur_file.GetContentFile(local_path)
+		modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
+		os.utime(local_path, (time.mktime(modified_date.timetuple()),time.mktime(modified_date.timetuple())))
+
+	def upload_file(self, file_path, folder=None, modified_time=None, create_folder = False, overwrite=False):
+		self.get_refresh_token()
+		drive = GoogleDrive(self.__google_auth__)
 		try:
 			with open(file_path) as f: pass
 		except IOError as e:
@@ -140,8 +214,9 @@ class GoogleDriveStorageService(StorageService):
 		mime_type = mime_type if mime_type else 'application/octet-stream'
 		media_body = MediaFileUpload(file_path, mimetype=mime_type, chunksize=1024*1024, resumable=True)
 		parents = []
+		cur_folder = 'root'
 		if folder is not None:
-			cur_folder = self.get_folder(folder, create=create_folder)['id']
+			cur_folder = self.get_folder(folder, create=create_folder)
 			parents.append({"id": cur_folder})
 
 		if modified_time is None:
@@ -151,22 +226,42 @@ class GoogleDriveStorageService(StorageService):
 			else:
 				modified_time += "Z"
 		logging.debug("Modified time: "+modified_time)
-		body = {
-			'title': file_name,
-			'mimeType': mime_type,
-			'parents' : parents,
-			'modifiedDate' : modified_time,
-		}
+		
+		existing_file = self.get_file_if_exists(file_name, cur_folder)
 
 		try: 
-			file = self.__google_auth__.service.files().insert(body=body, media_body=media_body).execute()
-			return file
+			cur_file = None
+
+			if existing_file is not None:
+				if overwrite is False:
+					raise RuntimeError("File already exists")
+				cur_file = drive.CreateFile({'id': existing_file['id']})
+			else:
+				cur_file = drive.CreateFile({'title': file_name})
+			cur_file['parents'] = parents
+			cur_file['modifiedDate'] = modified_time
+			cur_file['mimeType'] = mime_type
+			cur_file.SetContentFile(file_path)
+			cur_file.Upload()
+			
 		except apiclient.errors.HttpError, error:
-			print 'An error occured: %s' % error
+			print 'An error occured uploading file: %s' % error
 			return None
 
 
-	def get_folder(self, file_path, create=False):
+	def get_file_if_exists(self, file_name, folder_id):
+		drive = GoogleDrive(self.__google_auth__)
+		file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and title='{}'".format(folder_id, file_name)}).GetList()
+		if len(file_list) > 1:
+			raise RuntimeError('Multiple files with name "{}" exist'.format(file_name))
+		elif len(file_list) is 0:
+			logging.debug("File {} does not exist".format(file_name))
+			return None
+		else:
+			logging.debug("File {} exists".format(file_name))
+			return file_list[0]
+
+	def get_folder(self, folder_path, create=False):
 		return self.get_file(folder_path, is_folder = True, create = create)
 
 	def get_file(self, file_path, is_folder=False, create=False):
@@ -181,31 +276,34 @@ class GoogleDriveStorageService(StorageService):
 		if is_folder is False:
 			file_name = folders.pop()
 
-		parent = {'id':'root'}
+		parent = 'root'
 		
 		for cur_folder in folders:
-			file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder' and title='{}'".format(parent['id'], cur_folder)}).GetList()
+			file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder' and title='{}'".format(parent, cur_folder)}).GetList()
 			if len(file_list) > 1:
 				raise RuntimeError('Multiple folders with name "{}" exist'.format(cur_folder))
 			elif len(file_list) is 0:
-				if  create is False:
-					raise RuntimeError('Folder "{}" does not exist'.format(cur_folder))
+				if create is False:
+					raise ItemDoesNotExistError('Folder "{}" does not exist'.format(cur_folder))
 				parent = self.create_folder(cur_folder, parent)['id']
 				if parent is None:
 					raise RuntimeError('Unable to create folder "{}"'.format(cur_folder))
 			else:
-				parent = file_list[0]
+				parent = file_list[0]['id']
 			
 		if is_folder is True:
 			return parent
 
-		file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and title='{}'".format(parent['id'], file_name)}).GetList()
+		file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and title='{}'".format(parent, file_name)}).GetList()
 		if len(file_list) > 1:
 			raise RuntimeError('Multiple files with name "{}" exist'.format(file_name))
 		elif len(file_list) is 0:
-			raise RuntimeError('File "{}" does not exist'.format(file_name))
+			raise ItemDoesNotExistError('File "{}" does not exist'.format(file_name))
 		
 		return file_list[0]
+
+
+
 
 
 
@@ -230,6 +328,6 @@ class GoogleDriveStorageService(StorageService):
 			print "Folder creation complete"
 			return file
 		except apiclient.errors.HttpError, error:
-			print 'An error occured: %s' % error
+			print 'An error occured creating folder: %s' % error
 			return None
 

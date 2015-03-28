@@ -34,15 +34,6 @@ import os
 from time import sleep
 from mimetypes import guess_type
 
-# sudo pip install --upgrade google-api-python-client
-# import apiclient
-# from apiclient.discovery import build
-# from apiclient.http import MediaFileUpload
-# from apiclient.http import MediaIoBaseUpload
-# from apiclient.errors import ResumableUploadError
-# from oauth2client.client import OAuth2WebServerFlow
-# from oauth2client.file import Storage
-
 import argparse
 import logging
 
@@ -51,17 +42,20 @@ import time
 from storageservice import StorageService
 
 
-# class UTC(datetime.tzinfo):
-# 	"""UTC"""
+class ItemDoesNotExistError(RuntimeError):
+	pass
 
-# 	def utcoffset(self, dt):
-# 		return datetime.timedelta(0)
+class UTC(datetime.tzinfo):
+	"""UTC"""
 
-# 	def tzname(self, dt):
-# 		return "UTC"
+	def utcoffset(self, dt):
+		return datetime.timedelta(0)
 
-# 	def dst(self, dt):
-# 		return datetime.timedelta(0)
+	def tzname(self, dt):
+		return "UTC"
+
+	def dst(self, dt):
+		return datetime.timedelta(0)
 
 class OneDriveStorageService(StorageService):
 
@@ -129,36 +123,46 @@ class OneDriveStorageService(StorageService):
 
 		return refresh_token
 
-	def upload(self, file_name, destination=None, modified_time= None, create_folder = False):
-		print "Upload {} OneDrive Storage Service".format(file_name)
-		print "Function incomplete, need to add folder support"
+	def upload(self, file_path, destination=None, modified_time= None, create_folder = False, overwrite=False):
+		print "Upload {} OneDrive Storage Service".format(file_path)
+		
 		refresh_token = self.load_refresh_token()
 		access_token = self.get_access_token(refresh_token)
 		
-		file_size = os.path.getsize(file_name)
+		full_remote_path =os.path.basename(file_path)
+		if destination is not None:
+			if self.is_folder(destination) is False:
+				raise RunTimeError("Destination folder not valid")
+			if destination.endswith('/') is False:
+				destination = destination+"/"
+			full_remote_path=destination+full_remote_path
 
-		print "File size: "+str(file_size)
 
+		file_size = os.path.getsize(file_path)
+
+		payload = {}
+		payload["@name.conflictBehavior"] = "fail"
+		if overwrite is True:
+			payload["@name.conflictBehavior"] = "replace"
 		# Special case for empty file
 		if file_size == 0:
-
 			headers = {}
 			headers['Authorization']="bearer " +access_token
-			# headers['Content-Length'] = str(file_size)
-			# headers['Content-Range'] = 'bytes 0-0/1'
-			response = requests.put(self.onedrive_url_root+"/drive/root:/"+file_name+":/content", headers=headers)
-			# response = requests.put(data["uploadUrl"], data="", headers=headers)
+			response = requests.put(self.onedrive_url_root+"/drive/root:/"+urllib.quote(full_remote_path)+":/content", headers=headers, data="", params=payload)
+			# TODO: Don't retry if 409 error received that it already exists
 			if response.status_code not in (requests.codes.ok, requests.codes.created, requests.codes.accepted):
 				tries = 1;
 				while tries < 6 and response.status_code not in (requests.codes.ok, requests.codes.created):
 					print response.status_code
 					print "Onedrive connection failed Error: "+ response.text
+					if response.status_code in (requests.codes.conflict,):
+						raise RuntimeError("Unable to complete OneDrive upload")
 					print "Retry "+ str(tries)
 					if response.headers is not None and 'Retry-After' in response.headers:
 						print "retry after requested, value: " + response.headers['Retry-After']
 					sleep_length = float(1 << tries) / 2
 					time.sleep(sleep_length)
-					response = requests.post(self.onedrive_url_root+"/drive/root:/"+file_name+":/content", headers=headers)
+					response = requests.put(self.onedrive_url_root+"/drive/root:/"+urllib.quote(full_remote_path)+":/content", headers=headers, data="", params=payload)
 					tries = tries+1
 				if response.status_code not in (requests.codes.ok, requests.codes.created):
 					raise RuntimeError("Unable to complete upload session for onedrive")
@@ -169,9 +173,9 @@ class OneDriveStorageService(StorageService):
 
 		headers = {'Authorization':"bearer " +access_token, 'Content-Type':"application/json"}
 		
-		# payload = { "@name.conflictBehavior" : "rename"}
-		payload = { "@name.conflictBehavior" : "replace"}
-		response = requests.post(self.onedrive_url_root+"/drive/root:/"+file_name+":/upload.createSession", headers=headers, data=json.dumps(payload))
+		
+		print "Payload: "+str(payload)
+		response = requests.post(self.onedrive_url_root+"/drive/root:/"+urllib.quote(full_remote_path)+":/upload.createSession", headers=headers, data=json.dumps(payload))
 		if response.status_code != requests.codes.ok:
 			tries = 1;
 			while tries < 6 and response.status_code != requests.codes.ok:
@@ -179,7 +183,7 @@ class OneDriveStorageService(StorageService):
 				print "Retry "+ str(tries)
 				sleep_length = float(1 << tries) / 2
 				time.sleep(sleep_length)
-				response = requests.post(self.onedrive_url_root+"/drive/root:/"+file_name+":/upload.createSession", headers=headers, data=json.dumps(payload))
+				response = requests.post(self.onedrive_url_root+"/drive/root:/"+urllib.quote(full_remote_path)+":/upload.createSession", headers=headers, data=json.dumps(payload))
 				tries = tries+1
 			if response.status_code != requests.codes.ok:
 				raise RuntimeError("Unable to open upload session for onedrive")
@@ -187,14 +191,12 @@ class OneDriveStorageService(StorageService):
 
 		data = json.loads(response.text)
 
-		print "Upload Session created: "
-		print "uploadUrl: " + data["uploadUrl"]
-		print "expirationDateTime: " + data["expirationDateTime"]
-		print "nextExpectedRanges: " + str(data["nextExpectedRanges"])
+		# print "Upload Session created: "
+		# print "uploadUrl: " + data["uploadUrl"]
+		# print "expirationDateTime: " + data["expirationDateTime"]
+		# print "nextExpectedRanges: " + str(data["nextExpectedRanges"])
 
-		#TODO Add support for uploading files from a different local directory
 		
-
 		CHUNK_SIZE = 10*1024*1024
 		chunk_start = 0
 		chunk_end = CHUNK_SIZE - 1
@@ -204,8 +206,8 @@ class OneDriveStorageService(StorageService):
 		
 		## TODO: Implement Retry-After 
 		## TODO: Deal with insufficient Storage error (507)
-		## TODO: Deal with other 500 series errors
-		with open (file_name, "rb") as f:
+		## TODO: Deal with other 400/500 series errors
+		with open (file_path, "rb") as f:
 			while chunk_start < file_size:
 				chunk_data = f.read(CHUNK_SIZE)
 				headers = {}
@@ -219,6 +221,8 @@ class OneDriveStorageService(StorageService):
 					while tries < 6 and response.status_code not in (requests.codes.ok, requests.codes.created):
 						print response.status_code
 						print "Onedrive connection failed Error: "+ response.text
+						if response.status_code in (requests.codes.conflict,):
+							raise RuntimeError("Unable to complete upload session for onedrive")
 						print "Retry "+ str(tries)
 						if response.headers is not None and 'Retry-After' in response.headers:
 							print "retry after requested, value: " + response.headers['Retry-After']
@@ -238,43 +242,23 @@ class OneDriveStorageService(StorageService):
 		if response is not None:
 			print response.status_code
 			print response.text
-		# File created now
-		# data = json.loads(response.text)
-		# print data['id']
-		# headers = {}
-		# headers['Authorization']="bearer " +access_token
-		# headers['Content-Type']="application/json"
-		# patch_data = {}
-		# patch_data["name"] = "c.txt"
-		# response = requests.patch(self.onedrive_url_root+"/drive/items/"+data['id'], data = json.dumps(patch_data), headers=headers)
-		# if response.status_code not in (requests.codes.ok, requests.codes.created):
-		# 	tries = 1;
-		# 	while tries < 6 and response.status_code not in (requests.codes.ok, requests.codes.created):
-		# 		print "Onedrive connection failed Error: "+ response.text
-		# 		print "Retry "+ str(tries)
-		# 		sleep_length = float(1 << tries) / 2
-		# 		time.sleep(sleep_length)
-		# 		response = requests.patch(self.onedrive_url_root+"/drive/items/"+data['id'], data = json.dumps(patch_data), headers=headers)
-		# 		tries = tries+1
-		# 	if response.status_code not in (requests.codes.ok, requests.codes.created):
-		# 		raise RuntimeError("Unable to open upload session for onedrive")
-		# print response.status_code
-		# print response.text
-		
 
-	def open_if_not_exists(self, filename):
-		try:
-			fd = os.open(filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-		except:
-			return None
-		fobj = os.fdopen(fd, "wb")
-		return fobj
 
-	def download(self, file_path, destination=None):
+	def download(self, file_path, destination=None, overwrite=False):
 		print "Download {} OneDrive Storage Service".format(file_path)
 		
 		refresh_token = self.load_refresh_token()
 		access_token = self.get_access_token(refresh_token)
+
+		local_path = file_path.split('/')[-1]
+		if destination is not None:
+			local_path = os.path.join(destination, file_path)
+
+		if os.path.isdir(local_path):
+			raise RuntimeError("Local destination is a folder")
+		if overwrite is False and os.path.isfile(local_path):
+			raise RuntimeError("Local file {} exists.  Enable overwrite option to continue.".format(local_path))
+		f = open(local_path, "wb")
 
 		url = self.onedrive_url_root+"/drive/root:/"+urllib.quote(file_path)+":/content"
 		logging.info("URL to save file is: "+url)
@@ -292,11 +276,7 @@ class OneDriveStorageService(StorageService):
 		if response.status_code != requests.codes.ok:
 			raise RuntimeError("Unable to access onedrive file")
 
-		filename = file_path.split('/')[-1]
-		f = self.open_if_not_exists(filename)
-		if f is None: 
-			print "Unable to save file.  It may already exist."
-			return
+
 		size = 0;
 		for chunk in response.iter_content(chunk_size=1024*1024):
 			if chunk: # filter out keep-alive new chunks
@@ -311,11 +291,11 @@ class OneDriveStorageService(StorageService):
 		lastModifiedDateTimeString = self.get_modified_time(file_path) 
 		modifiedDate = parse(lastModifiedDateTimeString)
 		
-		os.utime(filename, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
+		os.utime(local_path, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
 		
-		print filename + " has been saved to disk"
+		print local_path + " has been saved to disk"
 		# TODO: deal with return values.
-		return (filename, lastModifiedDateTimeString)
+		return (local_path, lastModifiedDateTimeString)
 		
 
 	# Due to a issue with OneDrive API, Modified time doesn't match time in Web or Desktop OneDrive Clients
@@ -350,9 +330,69 @@ class OneDriveStorageService(StorageService):
 
 
 	def is_folder(self, folder_path):
-		pass
+		refresh_token = self.load_refresh_token()
+		access_token = self.get_access_token(refresh_token)
+
+		if folder_path.endswith('/'):
+			folder_path = folder_path[:-1]
+
+		headers = {'Authorization':"bearer " +access_token}
+		url = self.onedrive_url_root+"/drive/root:/"+urllib.quote(folder_path)
+		tries = 0
+		response = requests.get(url, headers=headers)
+		while response.status_code != requests.codes.ok and tries < 6:
+			logging.info("Error Status code: "+str(response.status_code))
+			if response.status_code == 404:
+				logging.info("Item not found: "+ folder_path)
+				return False
+			tries+=1
+			logging.info("Onedrive connection failed Error: "+ response.text)
+			logging.info("Attempt: "+ str(tries))
+			sleep_length = float(1 << tries)
+			time.sleep(sleep_length)
+			response = requests.get(url, headers=headers)
 		
-	
+		if response.status_code != requests.codes.ok:
+			raise RuntimeError("Unable to access onedrive folder")
+		
+		data = json.loads(response.text)
+		if "folder" in data:
+			return True
+		else:
+			return False
+		
+	#TODO Implement this.
+	def create_folder(self, folder_path):
+		refresh_token = self.load_refresh_token()
+		access_token = self.get_access_token(refresh_token)
+
+		if folder_path.endswith('/'):
+			folder_path = path[:-1]
+
+		headers = {'Authorization':"bearer " +access_token}
+		url = onedrive_url_root+"/drive/root:/"+urllib.quote(path)
+		tries = 0
+		response = requests.get(url, headers=headers)
+		while response.status_code != requests.codes.ok and tries < 6:
+			logging.info("Error Status code: "+str(response.status_code))
+			if response.status_code == 404:
+				logging.info("Item not found: "+ path)
+				return False
+			tries+=1
+			logging.info("Onedrive connection failed Error: "+ response.text)
+			logging.info("Attempt: "+ str(tries))
+			sleep_length = float(1 << tries)
+			time.sleep(sleep_length)
+			response = requests.get(url, headers=headers)
+		
+		if response.status_code != requests.codes.ok:
+			raise RuntimeError("Unable to access onedrive folder")
+		
+		data = json.loads(response.text)
+		if "folder" in data:
+			return True
+		else:
+			return False
 	def list_folder(self, folder_path):
 		pass
 
