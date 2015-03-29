@@ -7,7 +7,9 @@ Basic utilities to upload and download from various cloud storage services.
 
 Currently support for Google Drive and Microsoft OneDrive upload and download operations is implemented.
 
-This is in alpha.
+This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.
+
+No API keys are provided.  You will need to sign up as a developer with the service providers to get this to work.
 
 ## Usage
 
@@ -26,6 +28,12 @@ Uploads "test.txt" to the "examplefolder" directory on Google Drive.  It will cr
     ./multidrive -s googledrive -a download -r "example.txt" 
 
 Downloads "test.txt" in the root directory of Google Drive to the local computer.  WARNING: Local files may be overwritten with no warning if they match the remote file name.
+
+    ./multidrive -s googledrive -d onedrive -a copy -r "Source Folder" -e "Transfers" -c
+
+Copies the contents of "Source folder" on Google Drive to the "Transfers" folder on Microsoft OneDrive, creating the remote folder if necessary.  The program will get a list of files, then, transfer one file at a time to the other service by downloading it to the local machine, then uploading it again.
+
+
 
 ## Current Functionality
 
@@ -69,8 +77,7 @@ Create a file onedrive_client_secrets.json with the following information (inser
 
 ## Planned features
 Support for Amazon Cloud Drive and Dropbox is planned.
-Support for moving files and folders from one service to another.
-Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive.
+Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive files.
 Support for handling quota errors.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).

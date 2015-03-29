@@ -24,7 +24,7 @@ class StorageService(object):
 		pass
 
 	@abstractmethod
-	def upload(self, file_name, destination=None, modified_time= None, create_folder=False, overwrite=False):
+	def upload(self, file_path, destination=None, modified_time= None, create_folder=False, overwrite=False):
 		pass
 
 	@abstractmethod
@@ -37,4 +37,8 @@ class StorageService(object):
 
 	@abstractmethod
 	def list_folder(self, folder_path):
+		pass
+
+	@abstractmethod
+	def get_file_name(self, file):
 		pass

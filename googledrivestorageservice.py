@@ -74,14 +74,14 @@ class GoogleDriveStorageService(StorageService):
 		self.get_google_auth()
 
 	def upload(self, file_path, destination=None, modified_time= None, create_folder = False, overwrite = False):
-		print "Upload {} Google Drive Storage Service".format(file_name)
+		print "Upload {} Google Drive Storage Service".format(file_path)
 		self.upload_file(file_path, folder=destination, modified_time=modified_time, create_folder = create_folder, overwrite = overwrite)
 		
 
 
 	def download(self, file_path, destination=None, overwrite=False):
 		print "Download {} Google Drive Storage Service".format(file_path)
-		self.download_file(file_path, destination=destination, overwrite=overwrite)
+		return self.download_file(file_path, destination=destination, overwrite=overwrite)
 
 	def is_folder(self, folder_path):
 		if folder_path is None or folder_path == "":
@@ -174,6 +174,7 @@ class GoogleDriveStorageService(StorageService):
 		# Set modified time too!
 		modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
 		os.utime(local_path, (time.mktime(modified_date.timetuple()),time.mktime(modified_date.timetuple())))
+		return (local_path, cur_file['modifiedDate'])
 
 
 	def download_item(self, cur_file, destination=None, overwrite=False):
@@ -186,7 +187,7 @@ class GoogleDriveStorageService(StorageService):
 		if cur_file['mimeType'] == "application/vnd.google-apps.folder":
 			if not os.path.exists(local_path):
 				os.mkdir(local_path)
-			return
+			return (local_path, cur_file['modifiedDate'])
 
 		self.get_refresh_token()
 		drive = GoogleDrive(self.__google_auth__)
@@ -199,6 +200,7 @@ class GoogleDriveStorageService(StorageService):
 		cur_file.GetContentFile(local_path)
 		modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
 		os.utime(local_path, (time.mktime(modified_date.timetuple()),time.mktime(modified_date.timetuple())))
+		return (local_path, cur_file['modifiedDate'])
 
 	def upload_file(self, file_path, folder=None, modified_time=None, create_folder = False, overwrite=False):
 		self.get_refresh_token()
@@ -285,7 +287,7 @@ class GoogleDriveStorageService(StorageService):
 			elif len(file_list) is 0:
 				if create is False:
 					raise ItemDoesNotExistError('Folder "{}" does not exist'.format(cur_folder))
-				parent = self.create_folder(cur_folder, parent)['id']
+				parent = self.create_folder_helper(cur_folder, parent)['id']
 				if parent is None:
 					raise RuntimeError('Unable to create folder "{}"'.format(cur_folder))
 			else:
@@ -304,12 +306,13 @@ class GoogleDriveStorageService(StorageService):
 
 
 
+	def create_folder(self, folder_path):
+		self.get_folder(folder_path, create=True)
 
 
 
 
-
-	def create_folder(self, folder_name, parent, modified_time=None):
+	def create_folder_helper(self, folder_name, parent, modified_time=None):
 		
 		mime_type = 'application/vnd.google-apps.folder'
 		parents = []
@@ -331,3 +334,8 @@ class GoogleDriveStorageService(StorageService):
 			print 'An error occured creating folder: %s' % error
 			return None
 
+	def get_file_name(self, file):
+		return file['title']
+
+	def is_folder_from_file_type(self, file):
+		return file['mimeType'] == 'application/vnd.google-apps.folder'
