@@ -237,14 +237,27 @@ class GoogleDriveStorageService(StorageService):
 			if existing_file is not None:
 				if overwrite is False:
 					raise RuntimeError("File already exists")
-				cur_file = drive.CreateFile({'id': existing_file['id']})
+				old_file = self.__google_auth__.service.files().get(fileId=existing_file['id']).execute()
+				old_file['modifiedDate'] = modified_time
+				old_file['title'] = file_name
+				old_file['mimeType'] = mime_type
+				old_file['parents'] = parents
+				new_file = self.__google_auth__.service.files().update(fileId=existing_file['id'], body=old_file, media_body=media_body).execute()
+				# cur_file = drive.CreateFile({'id': existing_file['id']})
 			else:
-				cur_file = drive.CreateFile({'title': file_name})
-			cur_file['parents'] = parents
-			cur_file['modifiedDate'] = modified_time
-			cur_file['mimeType'] = mime_type
-			cur_file.SetContentFile(file_path)
-			cur_file.Upload()
+				body = {
+					'title': file_name,
+					'mimeType': mime_type,
+					'parents' : parents,
+					'modifiedDate' : modified_time,
+				}
+				self.__google_auth__.service.files().insert(body=body, media_body=media_body).execute()
+			# 	cur_file = drive.CreateFile({'title': file_name})
+			# cur_file['parents'] = parents
+			# cur_file['modifiedDate'] = modified_time
+			# cur_file['mimeType'] = mime_type
+			# cur_file.SetContentFile(file_path)
+			# cur_file.Upload()
 			
 		except apiclient.errors.HttpError, error:
 			print 'An error occured uploading file: %s' % error

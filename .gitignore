@@ -9,3 +9,9 @@ onedrive_client_secrets.json
 
 # OneDrive Credentials
 onedrive_settings.json
+
+# Cloud Drive API Information
+cloud_drive_client_secrets.json
+
+# Cloud Drive Credentials
+cloud_drive_settings.json

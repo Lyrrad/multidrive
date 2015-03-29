@@ -52,6 +52,7 @@ import logging
 import time
 from googledrivestorageservice import GoogleDriveStorageService
 from onedrivestorageservice import OneDriveStorageService
+from clouddrivestorageservice import CloudDriveStorageService
 import tempfile
 import shutil
 
@@ -60,6 +61,8 @@ def get_storage_service(service_name):
 		return GoogleDriveStorageService()
 	elif service_name.lower() == 'onedrive':
 		return OneDriveStorageService()
+	elif service_name.lower() == 'clouddrive':
+		return CloudDriveStorageService()
 	return None
 
 
@@ -67,9 +70,9 @@ def main():
 	parser = argparse.ArgumentParser(description='Multiple Cloud Storage Operation')
 	# parser.add_argument('-m', '--moveFile', help="Path to File to move")
 	# parser.add_argument('-s', '--moveFiles', nargs= '*', help="Path to Files to move")
-	parser.add_argument('-s', '--source', nargs=1, required=True, help='set primary service for this command. Valid values are onedrive and googledrive')
+	parser.add_argument('-s', '--source', nargs=1, required=True, help='set primary service for this command. Valid values are clouddrive, onedrive and googledrive')
 	parser.add_argument('-a', '--action', nargs=1, required=True, help='action to perform, valid actions include download, upload, list, and copy')
-	parser.add_argument('-d', '--destination', nargs=1, help='set secondary service for this command, Valid values are onedrive and googledrive.  Only valid with copy command')
+	parser.add_argument('-d', '--destination', nargs=1, help='set secondary service for this command, Valid values are clouddrive, onedrive and googledrive.  Only valid with copy command')
 	parser.add_argument('-l', '--local', nargs=1, help='path of local file or folder')
 	parser.add_argument('-r', '--remote', nargs=1, help='path of remote file or folder')
 	parser.add_argument('-c', '--createfolder', help='enable creation of necessary remote folders', action='store_true')
@@ -156,7 +159,7 @@ def main():
 						(local_temp_file, last_modified)  = storage_service.download_item(cur_file, destination=tmp_path, overwrite=args.overwrite)
 						
 
-						secondary_storage_service.upload(local_temp_file, destination=cur_destination, modified_time=last_modified, create_folder=args.createfolder)
+						secondary_storage_service.upload(local_temp_file, destination=cur_destination, modified_time=last_modified, create_folder=args.createfolder, overwrite=args.overwrite)
 						os.remove(local_temp_file)
 			else:
 				(local_temp_file, last_modified) = storage_service.download(args.remote[0], tmp_path, overwrite=args.overwrite)

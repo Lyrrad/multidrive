@@ -24,8 +24,6 @@ import urllib
 from urlparse import urlparse, parse_qs
 import os
 
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
 import sys
 import socket
 import logging

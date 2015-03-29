@@ -32,6 +32,14 @@ class StorageService(object):
 		pass
 
 	@abstractmethod
+	def download_item(self, cur_file, destination=None, overwrite=False):
+		pass
+
+	@abstractmethod
+	def create_folder(self, folder_path):
+		pass
+
+	@abstractmethod
 	def is_folder(self, folder_path):
 		pass
 
@@ -41,4 +49,8 @@ class StorageService(object):
 
 	@abstractmethod
 	def get_file_name(self, file):
+		pass
+
+	@abstractmethod
+	def is_folder_from_file_type(self, file):
 		pass
