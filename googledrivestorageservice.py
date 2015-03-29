@@ -214,7 +214,12 @@ class GoogleDriveStorageService(StorageService):
 		file_name = file_path.split('/')[-1]
 		mime_type = guess_type(file_path)[0]
 		mime_type = mime_type if mime_type else 'application/octet-stream'
+
+		file_size = os.path.getsize(file_path)
+
 		media_body = MediaFileUpload(file_path, mimetype=mime_type, chunksize=1024*1024, resumable=True)
+		if file_size == 0:
+			media_body = None
 		parents = []
 		cur_folder = 'root'
 		if folder is not None:
