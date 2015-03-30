@@ -204,9 +204,9 @@ class CloudDriveStorageService(StorageService):
                                              create_folder)
 
         file_name = os.path.basename(file_path)
-        file_id = self.get_file(destination_id, file_name)['id']
+        cur_file = self.get_file(destination_id, file_name)
 
-        if file_id is None:
+        if cur_file is None:
             url = self.content_url + "/nodes?suppress=deduplication"
             headers = {}
             headers['Authorization'] = "Bearer " + access_token
@@ -237,7 +237,7 @@ class CloudDriveStorageService(StorageService):
         else:
             if overwrite is False:
                 raise RuntimeError("File: {} exists, but overwrite is not set".format(file_name))
-            url = self.content_url + "/nodes/"+file_id+"/content"
+            url = self.content_url + "/nodes/"+cur_file['id']+"/content"
             headers = {}
             headers['Authorization'] = "Bearer " + access_token
 
