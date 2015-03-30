@@ -1,13 +1,15 @@
-#Multidrive
+#MultiDrive
 
 
 ## Description
 
 Basic utilities to upload and download from various cloud storage services.
 
-Currently support for Google Drive and Microsoft OneDrive upload and download operations is implemented.
+Support for Google Drive and Microsoft OneDrive upload and download operations is implemented.
 
-This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.
+Basic upload support for Cloud Drive is implemented.
+
+This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not in that OS yet.
 
 No API keys are provided.  You will need to sign up as a developer with the service providers to get this to work.
 
@@ -37,26 +39,25 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Current Functionality
 
-Google Drive:
+Google Drive / OneDrive:
 Upload file to any remote folder
 Download files and folders to any local folder.
 List remote files/folders.
 (Cannot upload folders yet)
+Move files/folders to from another cloud service.
 
-OneDrive
-Upload file to any remote folder
-Download file to local folder.
-(Cannot list files/folders yet)
-(Cannot download folders yet)
-(Cannot upload folders yet)
+Amazon Cloud Drive:
+Upload file to any remote folder.
+Move files/folders from another cloud service.
 
 ## Requirements
 
-Requires pydrive and requests libraries.
+Requires the pydrive, requests, and requests-toolbelt libraries.
 
 This can be installed by running:
 pip install PyDrive
 pip install requests
+pip install requests-toolbelt
 
 
 ## Google Drive setup
@@ -88,6 +89,7 @@ Support for setting modification dates is planned for services that support it. 
 Support for handling quota errors.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
+Deal with Google's versions feature when overwriting files.
 
 ## Licence 
 
