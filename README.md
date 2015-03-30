@@ -5,9 +5,7 @@
 
 Basic utilities to upload and download from various cloud storage services.
 
-Support for Google Drive and Microsoft OneDrive upload and download operations is implemented.
-
-Basic upload support for Cloud Drive is implemented.
+Support for Amazon Cloud Drive, Google Drive and Microsoft OneDrive upload and download operations are implemented.
 
 This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not in that OS yet.
 
@@ -29,7 +27,7 @@ Uploads "test.txt" to the "examplefolder" directory on Google Drive.  It will cr
 
     ./multidrive -s googledrive -a download -r "example.txt" 
 
-Downloads "test.txt" in the root directory of Google Drive to the local computer.  WARNING: Local files may be overwritten with no warning if they match the remote file name.
+Downloads "test.txt" in the root directory of Google Drive to the local computer. 
 
     ./multidrive -s googledrive -d onedrive -a copy -r "Source Folder" -e "Transfers" -c
 
@@ -39,16 +37,31 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Current Functionality
 
-Google Drive / OneDrive:
-Upload file to any remote folder
-Download files and folders to any local folder.
-List remote files/folders.
-(Cannot upload folders yet)
-Move files/folders to from another cloud service.
 
-Amazon Cloud Drive:
-Upload file to any remote folder.
-Move files/folders from another cloud service.
+|					|Google Drive	|OneDrive		|Cloud Drive 	|Dropbox		|
+|-------------------|---------------|---------------|---------------|---------------|
+|**Authentication**| | | | |
+|Authenticate user	|Yes|Yes|Yes|Pending|
+| | | | | |
+|**Basic File Operations**| | | | |
+|Upload File	|Yes|Yes|Yes|Pending|
+|Upload Folder	|Pending|Pending|Pending|Pending|
+|Download File	|Yes|Yes|Yes|Pending|
+|Download Folder	|Yes|Yes|Yes|Pending|
+|| | | | |			
+|**Advanced**				
+|Get Modified Time	|Yes|Partial|Partial|Unknown
+|Set Modified Time	|Yes|No|No|Unknown|
+|Local Overwrite	|Yes|Yes|Yes|Pending|
+|Remote Overwrite	|Yes|Yes|Yes|Pending|
+|Local Destination Folder	|Yes|Yes|Yes|Pending|
+|Remote Destination Folder	|Yes|Yes|Yes|Pending|
+|List Remote Files	|Yes|Yes|Yes|Pending|
+|Create Remote Folder	|Yes|Yes|Yes|Pending|
+|List Quota	|Pending|Pending|Pending|Pending|
+|Delete Remote File	|Pending|Pending|Pending|Pending|
+|Move Folders	|Yes|Yes|Yes|Pending|
+
 
 ## Requirements
 

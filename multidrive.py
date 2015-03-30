@@ -22,28 +22,12 @@
 import argparse
 import os
 
-import logging
-from time import sleep
-from mimetypes import guess_type
-
-# sudo pip install --upgrade google-api-python-client
-import apiclient
-from apiclient.discovery import build
-from apiclient.http import MediaFileUpload
-from apiclient.http import MediaIoBaseUpload
-from apiclient.errors import ResumableUploadError
-from oauth2client.client import OAuth2WebServerFlow
-from oauth2client.file import Storage
-
-import argparse
-import logging
-
-import time
 from googledrivestorageservice import GoogleDriveStorageService
 from onedrivestorageservice import OneDriveStorageService
 from clouddrivestorageservice import CloudDriveStorageService
 import tempfile
 import shutil
+
 
 def get_storage_service(service_name):
     if service_name.lower() == 'googledrive':
@@ -56,21 +40,34 @@ def get_storage_service(service_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Multiple Cloud Storage Operation')
-    # parser.add_argument('-m', '--moveFile', help="Path to File to move")
-    # parser.add_argument('-s', '--moveFiles', nargs= '*', help="Path to Files to move")
-    parser.add_argument('-s', '--source', nargs=1, required=True, help='set primary service for this command. Valid values are clouddrive, onedrive and googledrive')
-    parser.add_argument('-a', '--action', nargs=1, required=True, help='action to perform, valid actions include download, upload, list, and copy')
-    parser.add_argument('-d', '--destination', nargs=1, help='set secondary service for this command, Valid values are clouddrive, onedrive and googledrive.  Only valid with copy command')
-    parser.add_argument('-l', '--local', nargs=1, help='path of local file or folder')
-    parser.add_argument('-r', '--remote', nargs=1, help='path of remote file or folder')
-    parser.add_argument('-c', '--createfolder', help='enable creation of necessary remote folders', action='store_true')
-    parser.add_argument('-e', '--secondaryremote', nargs=1, help='path secondary remote file or folder (for copy action)')
-    parser.add_argument('-o', '--overwrite', help='enable overwriting of files', action='store_true')
+    parser = argparse.ArgumentParser(description='Multiple Cloud Storage Operations')
+    parser.add_argument('-s', '--source', nargs=1, required=True,
+                        help='set primary service for this command. Valid '
+                        'values are clouddrive, onedrive and googledrive')
+    parser.add_argument('-a', '--action', nargs=1, required=True,
+                        help='action to perform, valid actions include '
+                        'download, upload, list, and copy')
+    parser.add_argument('-d', '--destination', nargs=1,
+                        help='set secondary service for this command, Valid '
+                        'values are clouddrive, onedrive and googledrive.  '
+                        'Only valid with copy command')
+    parser.add_argument('-l', '--local', nargs=1,
+                        help='path of local file or folder')
+    parser.add_argument('-r', '--remote', nargs=1,
+                        help='path of remote file or folder')
+    parser.add_argument('-c', '--createfolder',
+                        help='enable creation of necessary remote folders',
+                        action='store_true')
+    parser.add_argument('-e', '--secondaryremote', nargs=1,
+                        help='path secondary remote file or folder (for copy '
+                        'action)')
+    parser.add_argument('-o', '--overwrite',
+                        help='enable overwriting of files',
+                        action='store_true')
     # parser.add_argument('-p', '--parent', help="parent folder for Google Drive")
     # parser.add_argument('-d', '--debug', help="enable debug logging")
 
-    args = parser.parse_args();
+    args = parser.parse_args()
 
     storage_service = get_storage_service(args.source[0])
     if storage_service is None:
@@ -93,6 +90,7 @@ def main():
         if args.local is not None:
             local_path = args.local[0]
         if storage_service.is_folder(args.remote[0]) is True:
+            # TODO: Give an error earlier if the destination folder doesn't exist
             remote_files = storage_service.list_folder(args.remote[0])
             for (cur_file, path) in remote_files:
                 destination = None
@@ -100,7 +98,7 @@ def main():
                     if path is None or len(path) == 0:
                         destination = None
                     else:
-                        ##TODO: is is portable to windows?  Should I be using a "/".join method?
+                        # TODO: is is portable to windows?  Should I be using a "/".join method?
                         destination = os.path.join(*path)
                 else:
                     destination = os.path.join(local_path, *path)
@@ -116,7 +114,6 @@ def main():
             new_path = list(path)
             new_path.append(storage_service.get_file_name(cur_file))
             print u"/".join(new_path)
-            
     elif args.action[0].lower() == "copy":
         secondary_storage_service = get_storage_service(args.destination[0])
         secondary_storage_service.authorize()

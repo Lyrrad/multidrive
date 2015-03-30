@@ -312,17 +312,16 @@ class OneDriveStorageService(StorageService):
 
         lastModifiedDateTimeString = cur_file['lastModifiedDateTime']
         modifiedDate = parse(lastModifiedDateTimeString)
-        
+
         os.utime(local_path, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
-        
+
         print local_path + " has been saved to disk"
         # TODO: deal with return values.
         return (local_path, lastModifiedDateTimeString)
 
-
     def download(self, file_path, destination=None, overwrite=False):
         print "Download {} OneDrive Storage Service".format(file_path)
-        
+
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -348,31 +347,30 @@ class OneDriveStorageService(StorageService):
             sleep_length = float(1 << tries) / 2
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers, stream = True)
-            
+
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Unable to access onedrive file")
 
-
-        size = 0;
-        for chunk in response.iter_content(chunk_size=1024*1024):
-            if chunk: # filter out keep-alive new chunks
+        size = 0
+        for chunk in response.iter_content(chunk_size=4*1024*1024):
+            if chunk:  # filter out keep-alive new chunks
                 f.write(chunk)
                 f.flush()
-                size = size +  1
-                if size % 200 == 0:
-                    logging.info(str(size) + "MB written")
+                size += 1
+                if size % 100 == 0:
+                    logging.info(str(size*4) + "MB written")
         os.fsync(f.fileno())
         f.close()
 
         lastModifiedDateTimeString = self.get_modified_time(file_path) 
         modifiedDate = parse(lastModifiedDateTimeString)
-        
+
         os.utime(local_path, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
-        
+
         print local_path + " has been saved to disk"
         # TODO: deal with return values.
         return (local_path, lastModifiedDateTimeString)
-        
+
 
     # Due to a issue with OneDrive API, Modified time doesn't match time in Web or Desktop OneDrive Clients
     def get_modified_time(self, file_path):
@@ -510,7 +508,7 @@ class OneDriveStorageService(StorageService):
     def get_folder_listing(self, cur_folder, path_list, current_path):
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
-        
+
         print "Getting listing for {}".format(current_path)
         result_list = []
         if current_path.endswith('/'):
@@ -529,8 +527,8 @@ class OneDriveStorageService(StorageService):
             print "Attempt: "+ str(tries)
             sleep_length = float(1 << tries)
             time.sleep(sleep_length)
-            url = self.onedrive_url_root+"/drive/root:/"+urllib.quote(current_path)+":/children"
-            
+            response = requests.get(url, headers=headers, stream = True)
+
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Unable to access OneDrive folder")
 

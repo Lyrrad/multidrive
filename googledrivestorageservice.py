@@ -18,8 +18,6 @@
 
 import dateutil.parser
 import datetime
-# import sys
-# from urlparse import urlparse, parse_qs
 import os
 
 from pydrive.auth import GoogleAuth
@@ -27,7 +25,6 @@ from pydrive.drive import GoogleDrive
 import logging
 from mimetypes import guess_type
 
-# sudo pip install --upgrade google-api-python-client
 import apiclient
 from apiclient.http import MediaFileUpload
 
@@ -315,28 +312,28 @@ class GoogleDriveStorageService(StorageService):
                                                 .format(cur_folder))
                 parent = self.create_folder_helper(cur_folder, parent)['id']
                 if parent is None:
-                    raise RuntimeError('Unable to create folder "{}"'.format(cur_folder))
+                    raise RuntimeError('Unable to create folder "{}"'
+                                       .format(cur_folder))
             else:
                 parent = file_list[0]['id']
 
         if is_folder is True:
             return parent
 
-        file_list = drive.ListFile({'q': "'{}' in parents and trashed=false and title='{}'".format(parent, file_name)}).GetList()
+        file_list = drive.ListFile({'q': "'{}' in parents and trashed=false"
+                                         "and title='{}'"
+                                         .format(parent, file_name)}).GetList()
         if len(file_list) > 1:
-            raise RuntimeError('Multiple files with name "{}" exist'.format(file_name))
+            raise RuntimeError('Multiple files with name "{}" exist'
+                               .format(file_name))
         elif len(file_list) is 0:
-            raise ItemDoesNotExistError('File "{}" does not exist'.format(file_name))
+            raise ItemDoesNotExistError('File "{}" does not exist'
+                                        .format(file_name))
 
         return file_list[0]
 
-
-
     def create_folder(self, folder_path):
         self.get_folder(folder_path, create=True)
-
-
-
 
     def create_folder_helper(self, folder_name, parent, modified_time=None):
 
@@ -353,7 +350,8 @@ class GoogleDriveStorageService(StorageService):
             body['modifiedDate'] = modified_time
 
         try:
-            file = self.__google_auth__.service.files().insert(body=body).execute()
+            file = (self.__google_auth__.service.files().insert(body=body)
+                    .execute())
             print "Folder creation complete"
             return file
         except apiclient.errors.HttpError, error:

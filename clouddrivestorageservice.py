@@ -47,6 +47,10 @@ class ItemDoesNotExistError(RuntimeError):
     pass
 
 
+class WrongTypeError(RuntimeError):
+    pass
+
+
 class UTC(datetime.tzinfo):
     """UTC"""
 
@@ -200,7 +204,7 @@ class CloudDriveStorageService(StorageService):
                                              create_folder)
 
         file_name = os.path.basename(file_path)
-        file_id = self.get_file(destination_id, file_name)
+        file_id = self.get_file(destination_id, file_name)['id']
 
         if file_id is None:
             url = self.content_url + "/nodes?suppress=deduplication"
@@ -318,7 +322,7 @@ class CloudDriveStorageService(StorageService):
                                    cur_item)
             else:
                 if data['data'][0]['kind'] != "FOLDER":
-                    raise RuntimeError("Error: {} is not a folder."
+                    raise WrongTypeError("Error: {} is not a folder."
                                        .format(cur_item))
                 cur_folder = data['data'][0]['id']
 
@@ -334,10 +338,6 @@ class CloudDriveStorageService(StorageService):
                          + folder_id + '/children',
                          params={'filters': 'name:'+file_name},
                          headers=headers)
-        # print "get Folder: " + folder_path
-        # print "cur_item:"+cur_item
-        # print r.status_code
-        # print r.text
 
         if r.status_code is not requests.codes.ok:
             raise RuntimeError("Error getting file")
@@ -354,31 +354,159 @@ class CloudDriveStorageService(StorageService):
             raise RuntimeError("Error: {} exists, but is not a file."
                                .format(file_name))
 
-        return data['data'][0]['id']
+        return data['data'][0]
 
     def download(self, file_path, destination=None, overwrite=False):
-        raise ValueError("This is not implemented yet")
+        print "Download {} Cloud Drive Storage Service".format(file_path)
+        refresh_token = self.load_refresh_token()
+        access_token = self.get_access_token(refresh_token)
+
+        (folder, file_name) = os.path.split(file_path)
+
+
+        if folder is None:
+            folder = self.root_folder
+        else:
+            folder = self.get_folder(self.root_folder, folder, create=False)
+
+        cur_file = self.get_file(folder, file_name)
+
+        if cur_file is None:
+            raise RuntimeError(u"File {} does not exist".format(file_path))
+        self.download_item(cur_file, destination, overwrite=overwrite)
 
     def download_item(self, cur_file, destination=None, overwrite=False):
-        raise ValueError("This is not implemented yet")
+        local_path = cur_file['name']
+
+
+        refresh_token = self.load_refresh_token()
+        access_token = self.get_access_token(refresh_token)
+
+        if destination is not None:
+            local_path = os.path.join(destination, local_path)
+
+
+        if cur_file['kind'] == 'FOLDER':
+            if not os.path.exists(local_path):
+                # Add proper error message here?
+                os.mkdir(local_path)
+            return (local_path, cur_file['modifiedDate'])
+        if os.path.isdir(local_path):
+            raise RuntimeError("Local destination is a folder")
+        if overwrite is False and os.path.isfile(local_path):
+            raise RuntimeError("Local file {} exists.  Enable overwrite option to continue.".format(local_path))
+
+        f = open(local_path, "wb")
+
+
+        url = self.content_url+"/nodes/"+cur_file['id']+"/content"
+        logging.info("URL to save file is: "+url)
+        headers = {'Authorization':"Bearer " +access_token}
+        response = requests.get(url, headers=headers, stream=True)
+        tries = 0
+        while response.status_code != requests.codes.ok and tries < 6:
+            tries += 1
+            print url
+            print "Save File: Cloud Drive connection failed Error: " + response.text
+            print "Retry " + str(tries)
+            sleep_length = float(1 << tries) / 2
+            time.sleep(sleep_length)
+            response = requests.get(url, headers=headers, stream=True)
+
+        if response.status_code != requests.codes.ok:
+            raise RuntimeError("Unable to access Cloud Drive file")
+
+        size = 0
+        for chunk in response.iter_content(chunk_size=4*1024*1024):
+            if chunk:  # filter out keep-alive new chunks
+                f.write(chunk)
+                f.flush()
+                size += 1
+                if size % 100 == 0:
+                    logging.info(str(size*4) + "MB written")
+        os.fsync(f.fileno())
+        f.close()
+
+        lastModifiedDateTimeString = cur_file['modifiedDate']
+        modifiedDate = parse(lastModifiedDateTimeString)
+
+        os.utime(local_path, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
+
+        print local_path + " has been saved to disk"
+        # TODO: deal with return values.
+        return (local_path, lastModifiedDateTimeString)
+
 
     def create_folder(self, folder_path):
         self.get_folder(self.root_folder, folder_path, create=True)
 
     def is_folder(self, folder_path):
+        if folder_path is None or len(folder_path) == 0 or folder_path == "/":
+            return True
         try:
             result = self.get_folder(self.root_folder, folder_path, create=False)
             if result is None:
                 return False
             return True
-        except ItemDoesNotExistError:
+        except (ItemDoesNotExistError, WrongTypeError):
             return False
 
     def list_folder(self, folder_path):
-        raise ValueError("This is not implemented yet")
+        refresh_token = self.load_refresh_token()
+        access_token = self.get_access_token(refresh_token)
+        base_folder = self.root_folder
+        if folder_path is not None and len(folder_path) > 0 and folder_path != "/":
+            base_folder = self.get_folder(base_folder, folder_path, create=False)
+        print "Getting listing for {}".format(folder_path)
+        folder_list = self.get_folder_listing(base_folder, [])
+        return folder_list
+
+    def get_folder_listing(self, cur_folder, path_list):
+        refresh_token = self.load_refresh_token()
+        access_token = self.get_access_token(refresh_token)
+
+        result_list = []
+
+
+        headers = {}
+        headers['Authorization'] = "Bearer " + access_token
+
+        url = self.metadata_url + '/nodes/' + cur_folder + '/children'
+        response = requests.get(url, headers=headers)
+        # print r.status_code
+        # print r.text
+
+        tries = 0
+        while response.status_code != requests.codes.ok and tries < 6:
+            tries+=1
+            print "Error Status code: "+str(response.status_code)
+            if response.status_code == 404:
+                logging.info("Item not found: "+ cur_folder)
+                raise RuntimeError("Item not found. Possible bad path: "+cur_folder)
+            print "Cloud Drive connection failed Error: "+ response.text
+            print "Attempt: "+ str(tries)
+            sleep_length = float(1 << tries)
+            time.sleep(sleep_length)
+            response = requests.get(url, headers=headers)
+
+        if response.status_code is not requests.codes.ok:
+            raise RuntimeError("Error getting folder")
+        data = json.loads(response.text)
+        if 'data' not in data:
+            raise RuntimeError("Error getting folder " + cur_folder)
+
+
+        for current_item in data['data']:
+            # cur_name = current_path+"/"+current_item['name']
+            result_list.append((current_item, path_list))
+            if current_item['kind'] == "FOLDER":
+                new_list = list(path_list)
+                new_list.append(current_item['name'])
+                result_list.extend(self.get_folder_listing(current_item['id'], new_list))
+        return result_list
 
     def get_file_name(self, file):
-        raise ValueError("This is not implemented yet")
+        return file['name']
 
     def is_folder_from_file_type(self, file):
-        raise ValueError("This is not implemented yet")
+        return file['kind'] == "FOLDER"
