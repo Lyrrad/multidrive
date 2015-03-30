@@ -481,37 +481,48 @@ class CloudDriveStorageService(StorageService):
         headers['Authorization'] = "Bearer " + access_token
 
         url = self.metadata_url + '/nodes/' + cur_folder + '/children'
-        response = requests.get(url, headers=headers)
-        # print r.status_code
-        # print r.text
+        params = {}
+        data = []
+        num_files = 0
+        while True:
+            response = requests.get(url, headers=headers, params=params)
+            # print r.status_code
+            # print r.text
 
-        tries = 0
-        while response.status_code != requests.codes.ok and tries < 6:
-            tries+=1
-            print "Error Status code: "+str(response.status_code)
-            if response.status_code == 404:
-                logging.info("Item not found: "+ cur_folder)
-                raise RuntimeError("Item not found. Possible bad path: "+cur_folder)
-            print "Cloud Drive connection failed Error: "+ response.text
-            print "Attempt: "+ str(tries)
-            sleep_length = float(1 << tries)
-            time.sleep(sleep_length)
-            response = requests.get(url, headers=headers)
+            tries = 0
+            while response.status_code != requests.codes.ok and tries < 6:
+                tries+=1
+                print "Error Status code: "+str(response.status_code)
+                if response.status_code == 404:
+                    logging.info("Item not found: "+ cur_folder)
+                    raise RuntimeError("Item not found. Possible bad path: "+cur_folder)
+                print "Cloud Drive connection failed Error: "+ response.text
+                print "Attempt: "+ str(tries)
+                sleep_length = float(1 << tries)
+                time.sleep(sleep_length)
+                response = requests.get(url, headers=headers)
 
-        if response.status_code is not requests.codes.ok:
-            raise RuntimeError("Error getting folder")
-        data = json.loads(response.text)
-        if 'data' not in data:
-            raise RuntimeError("Error getting folder " + cur_folder)
+            if response.status_code is not requests.codes.ok:
+                raise RuntimeError("Error getting folder")
+            cur_response = json.loads(response.text)
+            if 'data' not in cur_response:
+                raise RuntimeError("Error getting folder " + cur_folder)
+            data.extend(cur_response['data'])
+            num_files += len(cur_response['data'])
+            if num_files >= cur_response['count']:
+                break
+            params['startToken'] = cur_response['nextToken']
 
+        data.sort(key=lambda cur_file: cur_file['name'])
 
-        for current_item in data['data']:
+        for current_item in data:
             # cur_name = current_path+"/"+current_item['name']
             result_list.append((current_item, path_list))
             if current_item['kind'] == "FOLDER":
                 new_list = list(path_list)
                 new_list.append(current_item['name'])
                 result_list.extend(self.get_folder_listing(current_item['id'], new_list))
+
         return result_list
 
     def get_file_name(self, file):

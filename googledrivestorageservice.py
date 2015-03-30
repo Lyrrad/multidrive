@@ -223,6 +223,10 @@ class GoogleDriveStorageService(StorageService):
                 modified_time += ".000000Z"
             else:
                 modified_time += "Z"
+
+        # OneDrive returns times that happen to lie on the second without the microseconds at the end.
+        if '.' not in modified_time:
+                modified_time = modified_time.replace("Z", ".000000Z")
         logging.debug("Modified time: "+modified_time)
 
         existing_file = self.get_file_if_exists(file_name, cur_folder)
