@@ -79,13 +79,14 @@ See http://pythonhosted.org/PyDrive/quickstart.html for details on authenticatio
 
 In short, go to the APIs console and create a new Drive API project and put the client_secrets.json file in the working directory of this program.
 
-Credentials are stored in credentials.json after authenticated.
+Credentials are stored in credentials.json after authentication.
 
 ## OneDrive Setup
 
 Sign up for API key (TODO: Add instructions)
 
 Create a file onedrive_client_secrets.json with the following information (insert your client id and secret):
+
     {"client_id": "000000001234ABCD", "client_secret":"cL1eNtS3cr3T60eSHere01234567890A"}
 
 ## Cloud Drive Setup.
@@ -93,6 +94,7 @@ Create a file onedrive_client_secrets.json with the following information (inser
 Sign up for API key. See https://developer.amazon.com/public/apis/experience/cloud-drive/content/getting-started
 
 Create a file cloud_drive_client_secrets.json with the following information (insert your client id and secret, as well as your Return URL):
+
     {"client_id": "amzn1.application-oa2-client.000000001234ABCD", "client_secret":"cL1eNtS3cr3T60eSHere01234567890A", "return_uri":"https://example.com/login"}
 
 
