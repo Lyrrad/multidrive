@@ -267,6 +267,7 @@ class CloudDriveStorageService(StorageService):
 
         split_path = folder_path.split('/')
         # cur_path = cur_folder
+        # print "Path: "+ str(split_path)
         create_rest = False
         while len(split_path) > 0:
             cur_item = split_path.pop(0)
@@ -274,14 +275,18 @@ class CloudDriveStorageService(StorageService):
             if create_rest is False:
                 headers = {}
                 headers['Authorization'] = "Bearer " + access_token
+
                 r = requests.get(self.metadata_url + '/nodes/'
                                  + cur_folder + '/children',
-                                 params={'filters': 'name:'+cur_item},
+                                 params=urllib.urlencode({'filters': 'name:'+cur_item.replace(" ", "\ ")}),
                                  headers=headers)
-                print "get Folder: " + folder_path
-                print "cur_item:"+cur_item
-                print r.status_code
-                print r.text
+
+                # print "get Folder: " + folder_path
+                # print "url: " + self.metadata_url + '/nodes/'+ cur_folder + '/children'
+                # print "params: " + urllib.urlencode({'filters': 'name:'+cur_item.replace(" ", "\ ")})
+                # print "cur_item:"+cur_item
+                # print r.status_code
+                # print r.text
 
                 if r.status_code is not requests.codes.ok:
                     raise RuntimeError("Error getting folder")
@@ -292,6 +297,7 @@ class CloudDriveStorageService(StorageService):
             if create_rest is True or len(data['data']) == 0:
                 if create is False:
                     raise ItemDoesNotExistError("Error: Folder {} does not exist and createfolder is not set.".format(cur_item))
+                create_rest = True
                 url = self.metadata_url + "/nodes"
 
                 headers = {}
@@ -307,7 +313,10 @@ class CloudDriveStorageService(StorageService):
 
                 r = requests.post(url, headers=headers, data=data)
 
-                print "Text: "+ r.text
+                print "create Folder: " + folder_path
+                print "cur_item:"+cur_item
+                print r.status_code
+                print r.text
                 if r.status_code is not requests.codes.created:
                     print "Status: "+ str(r.status_code)
                     # print "The request that was sent was:"
@@ -336,7 +345,7 @@ class CloudDriveStorageService(StorageService):
         headers['Authorization'] = "Bearer " + access_token
         r = requests.get(self.metadata_url + '/nodes/'
                          + folder_id + '/children',
-                         params={'filters': 'name:'+file_name},
+                         params=urllib.urlencode({'filters': 'name:'+file_name.replace(" ", "\ ")}),
                          headers=headers)
 
         if r.status_code is not requests.codes.ok:

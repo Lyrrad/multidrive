@@ -33,7 +33,9 @@ Downloads "test.txt" in the root directory of Google Drive to the local computer
 
 Copies the contents of "Source folder" on Google Drive to the "Transfers" folder on Microsoft OneDrive, creating the remote folder if necessary.  The program will get a list of files, then, transfer one file at a time to the other service by downloading it to the local machine, then uploading it again.
 
+## Known issues
 
+Amazon Cloud Drive folders with more than 200 items cannot be listed, downloaded, or copied.  This will be resolved shortly.)
 
 ## Current Functionality
 
@@ -105,6 +107,7 @@ Support for handling quota errors.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
 Deal with Google's versions feature when overwriting files.
+Support for OneDrive's experimental upload from URL feature.  This could speed up transfers to OneDrive from other services that provide a public URL for files.
 
 ## Licence 
 
