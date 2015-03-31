@@ -56,7 +56,8 @@ class UTC(datetime.tzinfo):
 class GoogleDriveStorageService(StorageService):
 
     def authorize(self):
-        print("Authorize Google Drive Storage Service")
+        logger = logging.getLogger("multidrive")
+        logger.info("Authorize Google Drive Storage Service")
 
         flow = client.flow_from_clientsecrets(
             'google_drive_client_secrets.json',
@@ -78,15 +79,17 @@ class GoogleDriveStorageService(StorageService):
 
     def upload(self, file_path, destination=None, modified_time=None,
                create_folder=False, overwrite=False):
-        print("Upload {} Google Drive Storage Service".format(file_path))
+        print("Uploading {} to Google Drive".format(file_path))
         self.upload_file(file_path, folder=destination,
                          modified_time=modified_time,
                          create_folder=create_folder, overwrite=overwrite)
+        print("Upload complete")
 
     def download(self, file_path, destination=None, overwrite=False):
-        print("Download {} Google Drive Storage Service".format(file_path))
+        print("Downloading {} from Google Drive".format(file_path))
         return self.download_file(file_path, destination=destination,
                                   overwrite=overwrite)
+        print("Download Complete")
 
     def is_folder(self, folder_path):
         if folder_path is None or folder_path == "":
@@ -218,6 +221,11 @@ class GoogleDriveStorageService(StorageService):
                         raise RuntimeError("Abusive or malware file detected "
                                            "and not downloaded. Aborting.")
 
+                    # If it's not malware, perhaps we need to refresh the "
+                    # "token, so we'll do that on the next iteration
+                    self.__credentials__.refresh(httplib2.Http())
+                    self.__credentials__.apply(headers)
+
             tries += 1
             print("Save File: Google Drive connection failed Error: " +
                   response.text)
@@ -297,7 +305,6 @@ class GoogleDriveStorageService(StorageService):
                     fileId=existing_file['id'],
                     body=old_file,
                     media_body=media_body).execute()
-                # cur_file = drive.CreateFile({'id': existing_file['id']})
             else:
                 body = {
                     'title': file_name,

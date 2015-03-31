@@ -53,7 +53,8 @@ class OneDriveStorageService(StorageService):
     onedrive_url_root = "https://api.onedrive.com/v1.0"
 
     def authorize(self):
-        logging.debug("Authorize OneDrive Storage Service")
+        logger = logging.getLogger("multidrive")
+        logger.debug("Authorize OneDrive Storage Service")
 
         with open('onedrive_client_secrets.json', 'r') as f:
             config = json.load(f)
@@ -99,6 +100,7 @@ class OneDriveStorageService(StorageService):
         return parsed
 
     def load_refresh_token(self):
+        logger = logging.getLogger("multidrive")
         refresh_token = None
         try:
             with open('onedrive_settings.json', 'r') as f:
@@ -124,7 +126,7 @@ class OneDriveStorageService(StorageService):
         refresh_token = self.get_refresh_token_from_code(code)
 
         if (refresh_token is None):
-            logging.warning("Unable to get refresh token")
+            logger.warning("Unable to get refresh token")
             return None
 
         config = {'refresh_token': refresh_token}
@@ -295,7 +297,7 @@ class OneDriveStorageService(StorageService):
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
-
+        logger = logging.getLogger("multidrive")
         local_path = cur_file['name']
         if destination is not None:
             local_path = os.path.join(destination, local_path)
@@ -318,16 +320,27 @@ class OneDriveStorageService(StorageService):
         f = open(local_path, "wb")
 
         url = self.onedrive_url_root+"/drive/items/"+cur_file['id']+"/content"
-        logging.info("URL to save file is: "+url)
+        logger.info("URL to save file is: "+url)
         headers = {'Authorization': "bearer " + access_token}
         response = requests.get(url, headers=headers, stream=True)
         tries = 0
-        while response.status_code != requests.codes.ok and tries < 6:
+        while response.status_code != requests.codes.ok and tries < 8:
             tries += 1
-            logging.info("Save File: OneDrive connection failed Error: " +
-                         response.text)
-            logging.info("Retry " + str(tries))
-            sleep_length = float(1 << tries) / 2
+            logger.warning("Save File: OneDrive connection failed Code:" +
+                           str(response.status_code))
+            logger.warning("Save File: OneDrive connection failed Error: " +
+                           response.text)
+            logger.warning("Headers: " +
+                           str(response.headers))
+            logger.warning("Retry " + str(tries))
+            # Possible errors: # 509 bandwidth exceeded
+            # 503 Service Unavailable (with possible retry after header)
+            time_factor = 1
+            if response.status_code == requests.codes.bandwidth_limit_exceeded:
+                logger.warning("Bandwith Limit Exceeded, increasing wait time")
+                time_factor = 20
+            sleep_length = float(1 << tries) / 2 * time_factor
+            logger.warning("Waiting {} second(s) for next attempt".format(str(sleep_length)))
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers, stream=True)
 
@@ -341,7 +354,7 @@ class OneDriveStorageService(StorageService):
                 f.flush()
                 size = size + 1
                 if size % 200 == 0:
-                    logging.info(str(size) + "MB written")
+                    logger.warning(str(size) + "MB written")
         os.fsync(f.fileno())
         f.close()
 
@@ -356,6 +369,7 @@ class OneDriveStorageService(StorageService):
         return (local_path, lastModifiedDateTimeString)
 
     def download(self, file_path, destination=None, overwrite=False):
+        logger = logging.getLogger("multidrive")
         print("Download {} OneDrive Storage Service".format(file_path))
 
         refresh_token = self.load_refresh_token()
@@ -374,15 +388,15 @@ class OneDriveStorageService(StorageService):
 
         url = (self.onedrive_url_root+"/drive/root:/" +
                urllib.parse.quote(file_path)+":/content")
-        logging.info("URL to save file is: "+url)
+        logger.info("URL to save file is: "+url)
         headers = {'Authorization': "bearer " + access_token}
         response = requests.get(url, headers=headers, stream=True)
         tries = 0
         while response.status_code != requests.codes.ok and tries < 6:
             tries += 1
-            logging.info("Save File: OneDrive connection failed Error: " +
-                         response.text)
-            logging.info("Retry " + str(tries))
+            logger.info("Save File: OneDrive connection failed Error: " +
+                        response.text)
+            logger.info("Retry " + str(tries))
             sleep_length = float(1 << tries) / 2
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers, stream=True)
@@ -397,7 +411,7 @@ class OneDriveStorageService(StorageService):
                 f.flush()
                 size += 1
                 if size % 100 == 0:
-                    logging.info(str(size*4) + "MB written")
+                    logger.info(str(size*4) + "MB written")
         os.fsync(f.fileno())
         f.close()
 
@@ -414,6 +428,7 @@ class OneDriveStorageService(StorageService):
     # Due to a issue with OneDrive API, Modified time doesn't match time in
     # Web or Desktop OneDrive Clients
     def get_modified_time(self, file_path):
+        logger = logging.getLogger("multidrive")
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -428,8 +443,8 @@ class OneDriveStorageService(StorageService):
         tries = 0
         while response.status_code != requests.codes.ok and tries < 6:
             tries += 1
-            logging.info("OneDrive connection failed Error: " + response.text)
-            logging.info("Attempt: " + str(tries))
+            logger.info("OneDrive connection failed Error: " + response.text)
+            logger.info("Attempt: " + str(tries))
             sleep_length = float(1 << tries) / 2
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers)
@@ -450,6 +465,7 @@ class OneDriveStorageService(StorageService):
         return "folder" in result
 
     def get_item(self, item_path):
+        logger = logging.getLogger("multidrive")
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -462,13 +478,13 @@ class OneDriveStorageService(StorageService):
         tries = 0
         response = requests.get(url, headers=headers)
         while response.status_code != requests.codes.ok and tries < 6:
-            logging.info("Error Status code: "+str(response.status_code))
+            logger.info("Error Status code: "+str(response.status_code))
             if response.status_code == 404:
-                logging.info("Item not found: " + item_path)
+                logger.info("Item not found: " + item_path)
                 return None
             tries += 1
-            logging.info("Onedrive connection failed Error: " + response.text)
-            logging.info("Attempt: " + str(tries))
+            logger.info("Onedrive connection failed Error: " + response.text)
+            logger.info("Attempt: " + str(tries))
             sleep_length = float(1 << tries)
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers)
@@ -480,6 +496,7 @@ class OneDriveStorageService(StorageService):
 
     # TODO: Update http error handling code
     def create_folder(self, folder_path):
+        logger = logging.getLogger("multidrive")
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -526,7 +543,7 @@ class OneDriveStorageService(StorageService):
 
                 print("Error Status code: "+str(response.status_code))
                 if response.status_code == 404:
-                    logging.info("Item not found: " + prev_path)
+                    logger.info("Item not found: " + prev_path)
                     return False
                 tries += 1
                 print("Onedrive connection failed Error: " + response.text)
@@ -554,6 +571,7 @@ class OneDriveStorageService(StorageService):
         return folder_list
 
     def get_folder_listing(self, cur_folder, path_list, current_path):
+        logger = logging.getLogger("multidrive")
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -570,7 +588,7 @@ class OneDriveStorageService(StorageService):
             tries += 1
             print("Error Status code: "+str(response.status_code))
             if response.status_code == 404:
-                logging.info("Item not found: " + current_path)
+                logger.info("Item not found: " + current_path)
                 raise RuntimeError("Item not found. Possible bad path: " +
                                    current_path)
             print("Onedrive connection failed Error: " + response.text)

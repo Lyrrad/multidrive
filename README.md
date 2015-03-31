@@ -63,7 +63,10 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
-2015-03-30 0.0.1: Changed to Python 3 to allow 32-bit systems to upload files greater than 2GB in size.
+2015-03-31 0.1.1: Bug Fixes
+				  Added debug option (-b)
+
+2015-03-30 0.1.0: Changed to Python 3 to allow 32-bit systems to upload files greater than 2GB in size.
 				  Removed PyDrive as it is not supported in Python 3.
 				  Added new authenticaion method for Google Drive due to removal of PyDrive.  You'll need to rename the client_secrets.json file to google_drive_client_secrets.json and reauthenticate.
 				  Added prompt to acknowledge risks if malware detected by Google Drive

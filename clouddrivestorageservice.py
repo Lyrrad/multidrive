@@ -62,7 +62,8 @@ class CloudDriveStorageService(StorageService):
     root_folder = None
 
     def authorize(self):
-        logging.debug("Authorize OneDrive Storage Service")
+        logger = logging.getLogger("multidrive")
+        logger.debug("Authorize Cloud Drive Storage Service")
 
         with open('cloud_drive_client_secrets.json', 'r') as f:
             config = json.load(f)
@@ -101,6 +102,7 @@ class CloudDriveStorageService(StorageService):
         return parsed
 
     def load_refresh_token(self):
+        logger = logging.getLogger("multidrive")
         refresh_token = None
         try:
             with open('cloud_drive_settings.json', 'r') as f:
@@ -125,7 +127,7 @@ class CloudDriveStorageService(StorageService):
         refresh_token = self.get_refresh_token_from_code(code)
 
         if (refresh_token is None):
-            logging.warning("Unable to get refresh token")
+            logger.warning("Unable to get refresh token")
             return None
 
         config = {'refresh_token': refresh_token}
@@ -219,8 +221,25 @@ class CloudDriveStorageService(StorageService):
 
             r = requests.post(url, headers=headers, data=content)
 
+            tries = 0
+            while r.status_code != requests.codes.created and tries < 10:
+                tries += 1
+                print("Upload File: Cloud Drive connection failed Error: " +
+                      r.text)
+                print("Retry " + str(tries))
+                sleep_length = float(1 << tries) / 2
+                time.sleep(sleep_length)
+                content = MultipartEncoder(
+                    fields=[('metadata', ("", json.dumps(metadata))),
+                            ('content', (file_name,
+                                         open(file_path, 'rb'),
+                                         mime_type))])
+
+                r = requests.post(url, headers=headers, data=content)
+
             if r.status_code is not requests.codes.created:
                 print("Status: " + str(r.status_code))
+                print("Error: " + str(r.text))
 
                 raise RuntimeError("Error uploading file")
         else:
@@ -240,11 +259,22 @@ class CloudDriveStorageService(StorageService):
 
             headers["Content-Type"] = content.content_type
 
-            r = requests.put(url,
-                             headers=headers, data=content)
+            r = requests.put(url, headers=headers, data=content)
+
+            tries = 0
+            while r.status_code != requests.codes.ok and tries < 10:
+                tries += 1
+                print("Status: " + str(r.status_code))
+                print("Upload File: Cloud Drive connection failed Error: " +
+                      r.text)
+                print("Retry " + str(tries))
+                sleep_length = float(1 << tries) / 2
+                time.sleep(sleep_length)
+                r = requests.put(url, headers=headers, data=content)
 
             if r.status_code is not requests.codes.ok:
                 print("Status: " + str(r.status_code))
+                print("Error: " + str(r.text))
                 raise RuntimeError("Error uploading file")
         print("{} successfully uploaded".format(file_name))
 
@@ -368,6 +398,7 @@ class CloudDriveStorageService(StorageService):
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
+        logger = logging.getLogger("multidrive")
         local_path = cur_file['name']
 
         refresh_token = self.load_refresh_token()
@@ -392,16 +423,18 @@ class CloudDriveStorageService(StorageService):
         f = open(local_path, "wb")
 
         url = self.content_url+"/nodes/"+cur_file['id']+"/content"
-        logging.info("URL to save file is: "+url)
+        logger.info("URL to save file is: "+url)
         headers = {'Authorization': "Bearer " + access_token}
         response = requests.get(url, headers=headers, stream=True)
         tries = 0
         while response.status_code != requests.codes.ok and tries < 6:
             tries += 1
-            print(url)
-            print("Save File: Cloud Drive connection failed Error: "
-                  + response.text)
-            print("Retry " + str(tries))
+            logger.warning(url)
+            logger.warning("Save File: Cloud Drive connection failed Error: "
+                           + response.text)
+            logger.warning("Headers: " +
+                           str(response.headers))
+            logger.warning("Retry " + str(tries))
             sleep_length = float(1 << tries) / 2
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers, stream=True)
@@ -416,7 +449,7 @@ class CloudDriveStorageService(StorageService):
                 f.flush()
                 size += 1
                 if size % 100 == 0:
-                    logging.info(str(size*4) + "MB written")
+                    logger.info(str(size*4) + "MB written")
         os.fsync(f.fileno())
         f.close()
 
@@ -458,6 +491,7 @@ class CloudDriveStorageService(StorageService):
         return folder_list
 
     def get_folder_listing(self, cur_folder, path_list):
+        logger = logging.getLogger("multidrive")
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
@@ -478,13 +512,14 @@ class CloudDriveStorageService(StorageService):
             tries = 0
             while response.status_code != requests.codes.ok and tries < 6:
                 tries += 1
-                print("Error Status code: "+str(response.status_code))
+                logger.warning("Error Status code: "+str(response.status_code))
                 if response.status_code == 404:
-                    logging.info("Item not found: " + cur_folder)
+                    logger.warning("Item not found: " + cur_folder)
                     raise RuntimeError("Item not found. Possible bad path: "
                                        + cur_folder)
-                print("Cloud Drive connection failed Error: " + response.text)
-                print("Attempt: " + str(tries))
+                logger.warning("Cloud Drive connection failed "
+                               "Error: " + response.text)
+                logger.warning("Attempt: " + str(tries))
                 sleep_length = float(1 << tries)
                 time.sleep(sleep_length)
                 response = requests.get(url, headers=headers)

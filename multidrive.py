@@ -21,7 +21,7 @@
 
 import argparse
 import os
-
+import logging
 from googledrivestorageservice import GoogleDriveStorageService
 from onedrivestorageservice import OneDriveStorageService
 from clouddrivestorageservice import CloudDriveStorageService
@@ -65,7 +65,8 @@ def main():
     parser.add_argument('-o', '--overwrite',
                         help='enable overwriting of files',
                         action='store_true')
-    # parser.add_argument('-d', '--debug', help="enable debug logging")
+    parser.add_argument('-b', '--debug', help="enable debug logging",
+                        action='store_true')
 
     args = parser.parse_args()
 
@@ -74,7 +75,9 @@ def main():
         raise ValueError("Please specify a valid source service.")
 
     service.authorize()
-
+    if args.debug is True:
+        logging.getLogger("multidrive").setLevel(logging.DEBUG)
+        logging.getLogger("multidrive").debug("Logging enabled.")
     if args.action[0].lower() == "upload":
         if args.local is None:
             raise ValueError("Please specify a local file to upload.")
