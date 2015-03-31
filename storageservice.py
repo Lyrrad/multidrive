@@ -35,7 +35,8 @@ class StorageService(object):
         pass
 
     @abstractmethod
-    def download_item(self, cur_file, destination=None, overwrite=False):
+    def download_item(self, cur_file, destination=None,
+                      overwrite=False, create_folder=False):
         pass
 
     @abstractmethod

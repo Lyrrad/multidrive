@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2015 Darryl Tam <contact@darryltam.com>
@@ -40,7 +40,8 @@ def get_storage_service(service_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Multiple Cloud Storage Operations')
+    parser = argparse.ArgumentParser(description='Multiple Cloud Storage '
+                                                 'Operations')
     parser.add_argument('-s', '--source', nargs=1, required=True,
                         help='set primary service for this command. Valid '
                         'values are clouddrive, onedrive and googledrive')
@@ -64,16 +65,15 @@ def main():
     parser.add_argument('-o', '--overwrite',
                         help='enable overwriting of files',
                         action='store_true')
-    # parser.add_argument('-p', '--parent', help="parent folder for Google Drive")
     # parser.add_argument('-d', '--debug', help="enable debug logging")
 
     args = parser.parse_args()
 
-    storage_service = get_storage_service(args.source[0])
-    if storage_service is None:
+    service = get_storage_service(args.source[0])
+    if service is None:
         raise ValueError("Please specify a valid source service.")
 
-    storage_service.authorize()
+    service.authorize()
 
     if args.action[0].lower() == "upload":
         if args.local is None:
@@ -81,80 +81,111 @@ def main():
         destination = None
         if args.remote is not None:
             destination = args.remote[0]
-        storage_service.upload(args.local[0], destination=destination, create_folder=args.createfolder, overwrite=args.overwrite)
+        service.upload(args.local[0], destination=destination,
+                       create_folder=args.createfolder,
+                       overwrite=args.overwrite)
         pass
     elif args.action[0].lower() == "download":
         if args.remote is None:
-            raise ValueError("Please specify a remote file or folder to download.")
+            raise ValueError("Please specify a remote file or folder to "
+                             "download.")
         local_path = None
         if args.local is not None:
             local_path = args.local[0]
-        if storage_service.is_folder(args.remote[0]) is True:
-            # TODO: Give an error earlier if the destination folder doesn't exist
-            remote_files = storage_service.list_folder(args.remote[0])
+        if service.is_folder(args.remote[0]) is True:
+            # TODO: Give an error earlier if the
+            # destination folder doesn't exist
+            remote_files = service.list_folder(args.remote[0])
             for (cur_file, path) in remote_files:
                 destination = None
                 if local_path is None:
                     if path is None or len(path) == 0:
                         destination = None
                     else:
-                        # TODO: is is portable to windows?  Should I be using a "/".join method?
+                        # TODO: is is portable to windows?  Should I be using a
+                        # "/".join method?
                         destination = os.path.join(*path)
                 else:
                     destination = os.path.join(local_path, *path)
-                storage_service.download_item(cur_file, destination=destination, overwrite=args.overwrite)
+                service.download_item(cur_file,
+                                      destination=destination,
+                                      overwrite=args.overwrite,
+                                      create_folder=True)
         else:
-            storage_service.download(args.remote[0], local_path, overwrite=args.overwrite)
+            service.download(args.remote[0],
+                             local_path,
+                             overwrite=args.overwrite)
     elif args.action[0].lower() == "list":
         if args.remote is None:
             raise ValueError("Please specify a remote folder to list.")
-        if storage_service.is_folder(args.remote[0]) is False:
-            raise ValueError("Remote path is either does not exist or is not a folder")
-        for (cur_file, path) in storage_service.list_folder(args.remote[0]):
+        if service.is_folder(args.remote[0]) is False:
+            raise ValueError("Remote path is either does not exist or is not "
+                             "a folder")
+        for (cur_file, path) in service.list_folder(args.remote[0]):
             new_path = list(path)
-            new_path.append(storage_service.get_file_name(cur_file))
-            print u"/".join(new_path)
+            new_path.append(service.get_file_name(cur_file))
+            print("/".join(new_path))
     elif args.action[0].lower() == "copy":
-        secondary_storage_service = get_storage_service(args.destination[0])
-        secondary_storage_service.authorize()
-        if secondary_storage_service is None:
-            raise ValueError("Please specify a valid secondary source service.")
+        service2 = get_storage_service(args.destination[0])
+        service2.authorize()
+        if service2 is None:
+            raise ValueError("Please specify a valid secondary source "
+                             "service.")
         if args.source[0].lower() == args.secondaryremote[0].lower():
-            raise ValueError("Primary and secondary services must be different")
+            raise ValueError("Primary and secondary services must be "
+                             "different")
         if args.remote is None:
-            raise ValueError("Please specify a remote file or folder to copy from.")
+            raise ValueError("Please specify a remote file or folder to copy "
+                             "from.")
         if args.secondaryremote is None:
-            raise ValueError("Please specify a secondary remote file or folder to copy to.")
+            raise ValueError("Please specify a secondary remote file or "
+                             "folder to copy to.")
 
-        if args.createfolder is False and secondary_storage_service.is_folder(args.secondaryremote[0]) is False:
-            raise ValueError("Secondary remote folder does not exist. Use the createfolder option to create it")
+        if args.createfolder is False and \
+           service2.is_folder(args.secondaryremote[0]) \
+           is False:
+            raise ValueError("Secondary remote folder does not exist. Use the "
+                             "createfolder option to create it")
         tmp_path = tempfile.mkdtemp()
         try:
-            if storage_service.is_folder(args.remote[0]) is True:
-                remote_files = storage_service.list_folder(args.remote[0])
+            if service.is_folder(args.remote[0]) is True:
+                remote_files = service.list_folder(args.remote[0])
                 for (cur_file, path) in remote_files:
 
-                    cur_destination = args.secondaryremote[0]
-                    if len(path)>0:
-                        cur_destination = os.path.join(cur_destination, *path)
+                    cur_dest = args.secondaryremote[0]
+                    if len(path) > 0:
+                        cur_dest = os.path.join(cur_dest, *path)
 
-                    if storage_service.is_folder_from_file_type(cur_file) is True:
-                        if secondary_storage_service.is_folder(cur_destination) is False:
-                            secondary_storage_service.create_folder(cur_destination)
+                    if service.is_folder_from_file_type(cur_file):
+                        if not service2.is_folder(cur_dest):
+                            service2.create_folder(cur_dest)
                     else:
-                        (local_temp_file, last_modified) = storage_service.download_item(cur_file, destination=tmp_path, overwrite=args.overwrite)
+                        (local_temp,
+                         last_mod) = (service.download_item(
+                                      cur_file,
+                                      destination=tmp_path,
+                                      overwrite=args.overwrite))
 
-                        secondary_storage_service.upload(local_temp_file, destination=cur_destination, modified_time=last_modified, create_folder=args.createfolder, overwrite=args.overwrite)
-                        os.remove(local_temp_file)
+                        service2.upload(local_temp, destination=cur_dest,
+                                        modified_time=last_mod,
+                                        create_folder=args.createfolder,
+                                        overwrite=args.overwrite)
+                        os.remove(local_temp)
             else:
-                (local_temp_file, last_modified) = storage_service.download(args.remote[0], tmp_path, overwrite=args.overwrite)
-                secondary_storage_service.upload(local_temp_file, destination=args.secondaryremote[0], modified_time=last_modified, create_folder=args.createfolder, overwrite=args.overwrite)
-                os.remove(local_temp_file)
+                (local_temp, last_mod) = (service.download(
+                                          args.remote[0], tmp_path,
+                                          overwrite=args.overwrite))
+                service2.upload(local_temp,
+                                destination=args.secondaryremote[0],
+                                modified_time=last_mod,
+                                create_folder=args.createfolder,
+                                overwrite=args.overwrite)
+                os.remove(local_temp)
         finally:
             shutil.rmtree(tmp_path)
     else:
         raise ValueError("Please specify a valid action.")
 
-    # storage_service.download("test")
+
 if __name__ == "__main__":
     main()

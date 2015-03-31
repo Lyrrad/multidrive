@@ -1,8 +1,8 @@
 # Google Drive API Information
-client_secrets.json
+google_drive_client_secrets.json
 
 # Google Drive credentials
-credentials.json
+google_drive_settings.dat
 
 # OneDrive API Information
 onedrive_client_secrets.json

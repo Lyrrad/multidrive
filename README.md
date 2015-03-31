@@ -7,9 +7,9 @@ Basic utilities to upload and download from various cloud storage services.
 
 Support for Amazon Cloud Drive, Google Drive and Microsoft OneDrive upload and download operations are implemented.
 
-This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not in that OS yet.
+This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not work in that OS yet without further testing.
 
-No API keys are provided.  You will need to sign up as a developer with the service providers to get this to work.
+No API keys are provided.  You will need to sign up as a developer with each service providers to get keys.
 
 ## Usage
 
@@ -61,22 +61,38 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 |Delete Remote File	|Pending|Pending|Pending|Pending|
 |Move Folders	|Yes|Yes|Yes|Pending|
 
+## Updates
+
+2015-03-30 0.0.1: Changed to Python 3 to allow 32-bit systems to upload files greater than 2GB in size.
+				  Removed PyDrive as it is not supported in Python 3.
+				  Added new authenticaion method for Google Drive due to removal of PyDrive.  You'll need to rename the client_secrets.json file to google_drive_client_secrets.json and reauthenticate.
+				  Added prompt to acknowledge risks if malware detected by Google Drive
+				  Bug Fixes
+
+
 
 ## Requirements
 
-Requires the pydrive, requests, and requests-toolbelt libraries.
+Requires the httplib2, python-dateutil, google-api-python-client, requests, and requests-toolbelt libraries.
+
+google-api-python-client now supports Python 3, though it requires an updated httplib2 module not available in pip.  This can be installed from source.
 
 This can be installed by running:
-pip install PyDrive
+wget https://github.com/jcgregorio/httplib2/archive/master.zip
+	
+cd httplib2-master
+python3 ./setup.py install
+pip install google-api-python-client
 pip install requests
 pip install requests-toolbelt
+pip install python-dateutil
 
 
 ## Google Drive setup
 
 See http://pythonhosted.org/PyDrive/quickstart.html for details on authentication.
 
-In short, go to the APIs console and create a new Drive API project and put the client_secrets.json file in the working directory of this program.
+In short, go to the APIs console and create a new Drive API project and put the client_secrets.json file in the working directory of this program, but name it google_drive_client_secrets.json
 
 Credentials are stored in credentials.json after authentication.
 
@@ -98,9 +114,9 @@ Create a file cloud_drive_client_secrets.json with the following information (in
 
 
 ## Planned features
-Support for Amazon Cloud Drive and Dropbox is planned.
-Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive files.
-Support for handling quota errors.
+Support for Dropbox is planned.
+Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive files, though it has not been extensively tested.
+Support for handling quota errors and displaying remaining quota.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
 Deal with Google's versions feature when overwriting files.

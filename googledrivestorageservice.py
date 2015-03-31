@@ -15,18 +15,21 @@
 # You should have received a copy of the GNU General Public License
 # along with MultiDrive.  If not, see <http://www.gnu.org/licenses/>.
 
-
+import requests
 import dateutil.parser
 import datetime
 import os
-
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
+import json
 import logging
 from mimetypes import guess_type
 
 import apiclient
 from apiclient.http import MediaFileUpload
+
+from oauth2client import client
+from oauth2client.file import Storage
+from apiclient.discovery import build
+import httplib2
 
 import time
 
@@ -53,18 +56,35 @@ class UTC(datetime.tzinfo):
 class GoogleDriveStorageService(StorageService):
 
     def authorize(self):
-        print "Authorize Google Drive Storage Service"
-        self.get_google_auth()
+        print("Authorize Google Drive Storage Service")
+
+        flow = client.flow_from_clientsecrets(
+            'google_drive_client_secrets.json',
+            scope='https://www.googleapis.com/auth/drive',
+            redirect_uri='urn:ietf:wg:oauth:2.0:oob')
+
+        storage = Storage('google_drive_settings.dat')
+        credentials = storage.get()
+        if credentials is None or credentials.invalid:
+            url = flow.step1_get_authorize_url()
+            print("Go to this URL to authorize: {}".format(url))
+            response = input("Enter the Token you received: ")
+            credentials = flow.step2_exchange(response)
+            storage.put(credentials)
+        http_auth = credentials.authorize(httplib2.Http())
+        self.__credentials__ = credentials
+        credentials.set_store(storage)
+        self.__service__ = build('drive', 'v2', http=http_auth)
 
     def upload(self, file_path, destination=None, modified_time=None,
                create_folder=False, overwrite=False):
-        print "Upload {} Google Drive Storage Service".format(file_path)
+        print("Upload {} Google Drive Storage Service".format(file_path))
         self.upload_file(file_path, folder=destination,
                          modified_time=modified_time,
                          create_folder=create_folder, overwrite=overwrite)
 
     def download(self, file_path, destination=None, overwrite=False):
-        print "Download {} Google Drive Storage Service".format(file_path)
+        print("Download {} Google Drive Storage Service".format(file_path))
         return self.download_file(file_path, destination=destination,
                                   overwrite=overwrite)
 
@@ -91,10 +111,23 @@ class GoogleDriveStorageService(StorageService):
 
     def get_folder_listing(self, cur_folder, path_list):
 
-        drive = GoogleDrive(self.__google_auth__)
         result_list = []
-        file_list = drive.ListFile({'q': "'{}' in parents and trashed=false "
-                                   .format(cur_folder)}).GetList()
+        query = "'{}' in parents and trashed=false ".format(cur_folder)
+
+        file_list = []
+        page_token = None
+        while True:
+            files = None
+            if page_token:
+                files = (self.__service__.files().
+                         list(q=query, pageToken=page_token).execute())
+            else:
+                files = self.__service__.files().list(q=query).execute()
+
+            file_list.extend(files['items'])
+            if not files.get('nextPageToken'):
+                break
+
         file_list.sort(key=lambda cur_file: cur_file['title'])
         for cur_file in file_list:
             result_list.append((cur_file, path_list))
@@ -106,75 +139,24 @@ class GoogleDriveStorageService(StorageService):
 
         return result_list
 
-    def get_google_auth(self):
-        self.__google_auth__ = None
-        gauth = GoogleAuth()
-        gauth.LoadCredentials()
-        if gauth.credentials is None:
-            gauth.CommandLineAuth()
-        elif gauth.access_token_expired:
-            gauth.Refresh()
-        else:
-            gauth.Authorize()
-        self.__google_auth__ = gauth
-
-    # TODO Set debug logging
-    def get_refresh_token(self):
-        self.get_google_auth()
-        tries = 0
-        while self.__google_auth__ is None or self.__google_auth__ is None:
-            if tries == 10:
-                print "bad refresh"
-                raise RuntimeError("Unable to refresh token")
-            # bad refresh?
-            sleep_length = float(1 << tries) / 10
-            tries = tries+1
-            time.sleep(sleep_length)
-            print ("Error refreshing Google Drive token. "
-                   " Trying again. Attempt ") + str(tries) + " of 10"
-            self.get_google_auth()
-        if tries > 0:
-            print "Successfully refreshed token"
-
     def download_file(self, file_path, destination=None, overwrite=False):
-        self.get_refresh_token()
-        cur_file_info = self.get_file(file_path)
+        cur_file = self.get_file(file_path)
+        return self.download_item(cur_file, desintation=destination,
+                                  overwrite=overwrite, create_folder=False)
 
-        if cur_file_info['mimeType'] == "application/vnd.google-apps.folder":
-            raise RuntimeError("Path is a folder")
-
-        drive = GoogleDrive(self.__google_auth__)
-        cur_file = drive.CreateFile({'id': cur_file_info['id']})
-        local_path = cur_file_info['title']
-        if destination is not None:
-            local_path = os.path.join(destination, local_path)
-        if os.path.isdir(local_path):
-            raise RuntimeError("Local destination is a folder")
-        if overwrite is False and os.path.isfile(local_path):
-            raise RuntimeError(
-                "Local file {} exists.  Enable overwrite option to continue."
-                .format(local_path))
-        cur_file.GetContentFile(local_path)
-        # Set modified time too!
-        modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
-        os.utime(local_path, (time.mktime(modified_date.timetuple()),
-                              time.mktime(modified_date.timetuple())))
-        return (local_path, cur_file['modifiedDate'])
-
-    def download_item(self, cur_file, destination=None, overwrite=False):
+    def download_item(self, cur_file, destination=None, overwrite=False,
+                      create_folder=False):
 
         local_path = cur_file['title']
         if destination is not None:
             local_path = os.path.join(destination, local_path)
 
         if cur_file['mimeType'] == "application/vnd.google-apps.folder":
+            if create_folder is False:
+                raise RuntimeError("Path is a folder")
             if not os.path.exists(local_path):
                 os.mkdir(local_path)
             return (local_path, cur_file['modifiedDate'])
-
-        self.get_refresh_token()
-        # drive = GoogleDrive(self.__google_auth__)
-        # cur_file = drive.CreateFile({'id': cur_file['id']})
 
         if os.path.isdir(local_path):
             raise RuntimeError("Local destination is a folder")
@@ -182,18 +164,85 @@ class GoogleDriveStorageService(StorageService):
             raise RuntimeError(
                 "Local file {} exists.  Enable overwrite option to continue."
                 .format(local_path))
-        cur_file.GetContentFile(local_path)
+
+        fd = open(local_path, 'wb')
+        try:
+            self.download_helper(cur_file['id'], fd, cur_file['title'])
+        finally:
+            fd.close()
+
         modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
         os.utime(local_path, (time.mktime(modified_date.timetuple()),
                  time.mktime(modified_date.timetuple())))
         return (local_path, cur_file['modifiedDate'])
 
+    def download_helper(self, file_id, local_fd, file_name):
+        now = datetime.datetime.utcnow() + datetime.timedelta(minutes=1)
+        expiry = self.__credentials__.token_expiry
+        if now > expiry:
+            self.__credentials__.refresh(httplib2.Http())
+
+        headers = {}
+        self.__credentials__.apply(headers)
+        url = "https://www.googleapis.com/drive/v2/files/"+file_id
+        parameters = {'alt': 'media'}
+
+        response = requests.get(url, headers=headers, stream=True,
+                                params=parameters)
+
+        tries = 0
+        while response.status_code != requests.codes.ok and tries < 6:
+            if (response.status_code == requests.codes.forbidden):
+                message = json.loads(response.text)
+                if 'error' in message and 'errors' in message['error']:
+                    is_malware = False
+                    for cur_error in message['error']['errors']:
+                        if cur_error['reason'] == 'abuse':
+                            is_malware = True
+                            break
+                    if is_malware is True:
+                        print("Error downloading file with name: {}"
+                              .format(file_name))
+                        answer = input("The file you have selected to "
+                                       "download has been flaged as abusive "
+                                       "or malware by Google. Do you still "
+                                       "want to download?  Only do so if you "
+                                       "understand the risks.  Enter 'y' or "
+                                       "'yes' if you wish to do so. ")
+                        if (answer.lower() == 'y' or answer.lower() == 'yes'):
+                            parameters['acknowledgeAbuse'] = 'true'
+                            response = requests.get(url, headers=headers,
+                                                    stream=True,
+                                                    params=parameters)
+                            continue
+                        raise RuntimeError("Abusive or malware file detected "
+                                           "and not downloaded. Aborting.")
+
+            tries += 1
+            print("Save File: Google Drive connection failed Error: " +
+                  response.text)
+            print("Retry " + str(tries))
+            sleep_length = float(1 << tries) / 2
+            time.sleep(sleep_length)
+            response = requests.get(url, headers=headers, stream=True,
+                                    params=parameters)
+
+        if response.status_code != requests.codes.ok:
+            raise RuntimeError("Unable to access Google Drive file")
+
+        size = 0
+        for chunk in response.iter_content(chunk_size=1024*1024):
+            if chunk:  # filter out keep-alive new chunks
+                local_fd.write(chunk)
+                local_fd.flush()
+                size = size + 1
+                if size % 200 == 0:
+                    logging.info(str(size) + "MB written")
+        os.fsync(local_fd.fileno())
+
     def upload_file(self, file_path, folder=None, modified_time=None,
                     create_folder=False, overwrite=False):
-        self.get_refresh_token()
-        # drive = GoogleDrive(self.__google_auth__)
         try:
-            # with open(file_path) as f: pass
             open(file_path)
         except IOError as e:
             raise IOError("Unable to open file. Error: "+str(e))
@@ -224,7 +273,8 @@ class GoogleDriveStorageService(StorageService):
             else:
                 modified_time += "Z"
 
-        # OneDrive returns times that happen to lie on the second without the microseconds at the end.
+        # OneDrive returns times that happen to lie on the second without the
+        # microseconds at the end.
         if '.' not in modified_time:
                 modified_time = modified_time.replace("Z", ".000000Z")
         logging.debug("Modified time: "+modified_time)
@@ -237,13 +287,13 @@ class GoogleDriveStorageService(StorageService):
             if existing_file is not None:
                 if overwrite is False:
                     raise RuntimeError("File already exists")
-                old_file = self.__google_auth__.service.files().get(
+                old_file = self.__service__.files().get(
                     fileId=existing_file['id']).execute()
                 old_file['modifiedDate'] = modified_time
                 old_file['title'] = file_name
                 old_file['mimeType'] = mime_type
                 old_file['parents'] = parents
-                self.__google_auth__.service.files().update(
+                self.__service__.files().update(
                     fileId=existing_file['id'],
                     body=old_file,
                     media_body=media_body).execute()
@@ -255,25 +305,18 @@ class GoogleDriveStorageService(StorageService):
                     'parents': parents,
                     'modifiedDate': modified_time,
                 }
-                self.__google_auth__.service.files().insert(
+                self.__service__.files().insert(
                     body=body,
                     media_body=media_body).execute()
-            #   cur_file = drive.CreateFile({'title': file_name})
-            # cur_file['parents'] = parents
-            # cur_file['modifiedDate'] = modified_time
-            # cur_file['mimeType'] = mime_type
-            # cur_file.SetContentFile(file_path)
-            # cur_file.Upload()
 
-        except apiclient.errors.HttpError, error:
-            print 'An error occured uploading file: %s' % error
+        except apiclient.errors.HttpError as error:
+            print('An error occured uploading file: %s' % error)
             return None
 
     def get_file_if_exists(self, file_name, folder_id):
-        drive = GoogleDrive(self.__google_auth__)
-        file_list = drive.ListFile(
-            {'q': "'{}' in parents and trashed=false and title='{}'"
-             .format(folder_id, file_name)}).GetList()
+        query = ("'{}' in parents and trashed=false and "
+                 "title='{}'".format(folder_id, file_name))
+        file_list = self.__service__.files().list(q=query).execute()['items']
         if len(file_list) > 1:
             raise RuntimeError('Multiple files with name "{}" exist'
                                .format(file_name))
@@ -293,7 +336,6 @@ class GoogleDriveStorageService(StorageService):
             file_path = file_path[:-1]
 
         folders = file_path.split('/')
-        drive = GoogleDrive(self.__google_auth__)
 
         file_name = None
         if is_folder is False:
@@ -302,11 +344,11 @@ class GoogleDriveStorageService(StorageService):
         parent = 'root'
 
         for cur_folder in folders:
-            file_list = drive.ListFile({'q': (
-                "'{}' in parents and trashed=false and "
-                "mimeType='application/vnd.google-apps.folder' and "
-                "title='{}'")
-                .format(parent, cur_folder)}).GetList()
+            query = ("'{}' in parents and trashed=false and "
+                     "mimeType='application/vnd.google-apps.folder' and "
+                     "title='{}'".format(parent, cur_folder))
+            file_list = (self.__service__.files()
+                         .list(q=query).execute()['items'])
             if len(file_list) > 1:
                 raise RuntimeError('Multiple folders with name "{}" exist'
                                    .format(cur_folder))
@@ -324,9 +366,9 @@ class GoogleDriveStorageService(StorageService):
         if is_folder is True:
             return parent
 
-        file_list = drive.ListFile({'q': "'{}' in parents and trashed=false"
-                                         "and title='{}'"
-                                         .format(parent, file_name)}).GetList()
+        query = ("'{}' in parents and trashed=false and title='{}'"
+                 .format(parent, file_name))
+        file_list = self.__service__.files().list(q=query).execute()['items']
         if len(file_list) > 1:
             raise RuntimeError('Multiple files with name "{}" exist'
                                .format(file_name))
@@ -354,12 +396,12 @@ class GoogleDriveStorageService(StorageService):
             body['modifiedDate'] = modified_time
 
         try:
-            file = (self.__google_auth__.service.files().insert(body=body)
+            file = (self.__service__.files().insert(body=body)
                     .execute())
-            print "Folder creation complete"
+            print("Folder creation complete")
             return file
-        except apiclient.errors.HttpError, error:
-            print 'An error occured creating folder: %s' % error
+        except apiclient.errors.HttpError as error:
+            print('An error occured creating folder: %s' % error)
             return None
 
     def get_file_name(self, file):

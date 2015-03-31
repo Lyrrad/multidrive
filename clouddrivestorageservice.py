@@ -20,22 +20,11 @@ import requests
 import json
 from dateutil.parser import parse
 import datetime
-import argparse
-import sys
-import urllib
-from urlparse import urlparse, parse_qs
+import urllib.parse
 import os
 
-import sys
-import socket
 import logging
-import httplib2
-import os
-from time import sleep
 from mimetypes import guess_type
-
-import argparse
-import logging
 
 from requests_toolbelt import MultipartEncoder
 import time
@@ -88,8 +77,8 @@ class CloudDriveStorageService(StorageService):
         access_token = self.get_access_token(refresh_token)
         self.load_end_points(access_token)
         self.load_root_folder(access_token)
-        print "refresh token: " + refresh_token
-        print "access token: " + access_token
+        print("refresh token: " + refresh_token)
+        print("access token: " + access_token)
 
     def get_refresh_token_from_code(self, code):
         data = {'client_id': self.__client_id__,
@@ -107,7 +96,8 @@ class CloudDriveStorageService(StorageService):
         # , since it's good for 1 hour
 
     def parse_response(self, response):
-        parsed = parse_qs(urlparse(response).query)['code'][0]
+        parsed = urllib.parse.parse_qs(
+            urllib.parse.urlparse(response).query)['code'][0]
         return parsed
 
     def load_refresh_token(self):
@@ -128,9 +118,9 @@ class CloudDriveStorageService(StorageService):
                       'redirect_uri': self.__return_uri__}
         print(("Go to this URL to authorize.  Input the redirected URL: "
                "https://www.amazon.com/ap/oa?")
-              + urllib.urlencode(parameters))
+              + urllib.parse.urlencode(parameters))
 
-        response = raw_input("Enter the URL you were redirected to: ")
+        response = input("Enter the URL you were redirected to: ")
         code = self.parse_response(response)
         refresh_token = self.get_refresh_token_from_code(code)
 
@@ -165,8 +155,8 @@ class CloudDriveStorageService(StorageService):
                          '/drive/v1/account/endpoint',
                          headers=headers)
         if r.status_code is not requests.codes.ok:
-            print r.status_code
-            print r.text
+            print(r.status_code)
+            print(r.text)
             raise RuntimeError("Error getting endpoints")
         data = json.loads(r.text)
         if data['customerExists'] is not True:
@@ -181,8 +171,8 @@ class CloudDriveStorageService(StorageService):
                          '/nodes?filters=isRoot:true',
                          headers=headers)
         if r.status_code is not requests.codes.ok:
-            print r.status_code
-            print r.text
+            print(r.status_code)
+            print(r.text)
             raise RuntimeError("Error getting endpoints")
         data = json.loads(r.text)
         if 'data' not in data:
@@ -195,7 +185,7 @@ class CloudDriveStorageService(StorageService):
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
 
-        print "Upload {} Cloud Drive Storage Service".format(file_path)
+        print("Upload {} Cloud Drive Storage Service".format(file_path))
 
         destination_id = self.root_folder
         if destination is not None:
@@ -227,16 +217,16 @@ class CloudDriveStorageService(StorageService):
 
             headers["Content-Type"] = content.content_type
 
-            r = requests.post(url,
-                             headers=headers, data=content)
+            r = requests.post(url, headers=headers, data=content)
 
             if r.status_code is not requests.codes.created:
-                print "Status: "+ str(r.status_code)
+                print("Status: " + str(r.status_code))
 
                 raise RuntimeError("Error uploading file")
         else:
             if overwrite is False:
-                raise RuntimeError("File: {} exists, but overwrite is not set".format(file_name))
+                raise RuntimeError("File: {} exists, but overwrite is not set"
+                                   .format(file_name))
             url = self.content_url + "/nodes/"+cur_file['id']+"/content"
             headers = {}
             headers['Authorization'] = "Bearer " + access_token
@@ -254,9 +244,9 @@ class CloudDriveStorageService(StorageService):
                              headers=headers, data=content)
 
             if r.status_code is not requests.codes.ok:
-                print "Status: " + str(r.status_code)
+                print("Status: " + str(r.status_code))
                 raise RuntimeError("Error uploading file")
-        print u"{} successfully uploaded".format(file_name)
+        print("{} successfully uploaded".format(file_name))
 
     def get_folder(self, cur_folder, folder_path, create=False):
         refresh_token = self.load_refresh_token()
@@ -276,17 +266,12 @@ class CloudDriveStorageService(StorageService):
                 headers = {}
                 headers['Authorization'] = "Bearer " + access_token
 
+                params = urllib.parse.urlencode({'filters': 'name:'
+                                                + cur_item.replace(" ", "\ ")})
                 r = requests.get(self.metadata_url + '/nodes/'
                                  + cur_folder + '/children',
-                                 params=urllib.urlencode({'filters': 'name:'+cur_item.replace(" ", "\ ")}),
+                                 params=params,
                                  headers=headers)
-
-                # print "get Folder: " + folder_path
-                # print "url: " + self.metadata_url + '/nodes/'+ cur_folder + '/children'
-                # print "params: " + urllib.urlencode({'filters': 'name:'+cur_item.replace(" ", "\ ")})
-                # print "cur_item:"+cur_item
-                # print r.status_code
-                # print r.text
 
                 if r.status_code is not requests.codes.ok:
                     raise RuntimeError("Error getting folder")
@@ -296,7 +281,9 @@ class CloudDriveStorageService(StorageService):
 
             if create_rest is True or len(data['data']) == 0:
                 if create is False:
-                    raise ItemDoesNotExistError("Error: Folder {} does not exist and createfolder is not set.".format(cur_item))
+                    raise ItemDoesNotExistError("Error: Folder {} does not "
+                                                "exist and createfolder is "
+                                                "not set.".format(cur_item))
                 create_rest = True
                 url = self.metadata_url + "/nodes"
 
@@ -313,16 +300,12 @@ class CloudDriveStorageService(StorageService):
 
                 r = requests.post(url, headers=headers, data=data)
 
-                print "create Folder: " + folder_path
-                print "cur_item:"+cur_item
-                print r.status_code
-                print r.text
+                print("create Folder: " + folder_path)
+                print("cur_item:"+cur_item)
+                print(r.status_code)
+                print(r.text)
                 if r.status_code is not requests.codes.created:
-                    print "Status: "+ str(r.status_code)
-                    # print "The request that was sent was:"
-                    # req = requests.Request('POST',url,headers=headers,files=files).prepare()
-                    # print req.body
-
+                    print("Status: " + str(r.status_code))
                     raise RuntimeError("Error creating folder")
                 data = json.loads(r.text)
                 cur_folder = data['id']
@@ -332,7 +315,7 @@ class CloudDriveStorageService(StorageService):
             else:
                 if data['data'][0]['kind'] != "FOLDER":
                     raise WrongTypeError("Error: {} is not a folder."
-                                       .format(cur_item))
+                                         .format(cur_item))
                 cur_folder = data['data'][0]['id']
 
         return cur_folder
@@ -343,9 +326,11 @@ class CloudDriveStorageService(StorageService):
 
         headers = {}
         headers['Authorization'] = "Bearer " + access_token
+        params = urllib.parse.urlencode({'filters': 'name:' +
+                                        file_name.replace(" ", "\ ")})
         r = requests.get(self.metadata_url + '/nodes/'
                          + folder_id + '/children',
-                         params=urllib.urlencode({'filters': 'name:'+file_name.replace(" ", "\ ")}),
+                         params=params,
                          headers=headers)
 
         if r.status_code is not requests.codes.ok:
@@ -366,12 +351,8 @@ class CloudDriveStorageService(StorageService):
         return data['data'][0]
 
     def download(self, file_path, destination=None, overwrite=False):
-        print "Download {} Cloud Drive Storage Service".format(file_path)
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-
+        print("Download {} Cloud Drive Storage Service".format(file_path))
         (folder, file_name) = os.path.split(file_path)
-
 
         if folder is None:
             folder = self.root_folder
@@ -381,12 +362,13 @@ class CloudDriveStorageService(StorageService):
         cur_file = self.get_file(folder, file_name)
 
         if cur_file is None:
-            raise RuntimeError(u"File {} does not exist".format(file_path))
-        self.download_item(cur_file, destination, overwrite=overwrite)
+            raise RuntimeError("File {} does not exist".format(file_path))
+        self.download_item(cur_file, destination, overwrite=overwrite,
+                           create_folder=False)
 
-    def download_item(self, cur_file, destination=None, overwrite=False):
+    def download_item(self, cur_file, destination=None, overwrite=False,
+                      create_folder=False):
         local_path = cur_file['name']
-
 
         refresh_token = self.load_refresh_token()
         access_token = self.get_access_token(refresh_token)
@@ -394,8 +376,9 @@ class CloudDriveStorageService(StorageService):
         if destination is not None:
             local_path = os.path.join(destination, local_path)
 
-
         if cur_file['kind'] == 'FOLDER':
+            if create_folder is False:
+                raise RuntimeError("Error: Folder chosen to be downloaded.")
             if not os.path.exists(local_path):
                 # Add proper error message here?
                 os.mkdir(local_path)
@@ -403,21 +386,22 @@ class CloudDriveStorageService(StorageService):
         if os.path.isdir(local_path):
             raise RuntimeError("Local destination is a folder")
         if overwrite is False and os.path.isfile(local_path):
-            raise RuntimeError("Local file {} exists.  Enable overwrite option to continue.".format(local_path))
+            raise RuntimeError("Local file {} exists.  Enable overwrite "
+                               "option to continue.".format(local_path))
 
         f = open(local_path, "wb")
 
-
         url = self.content_url+"/nodes/"+cur_file['id']+"/content"
         logging.info("URL to save file is: "+url)
-        headers = {'Authorization':"Bearer " +access_token}
+        headers = {'Authorization': "Bearer " + access_token}
         response = requests.get(url, headers=headers, stream=True)
         tries = 0
         while response.status_code != requests.codes.ok and tries < 6:
             tries += 1
-            print url
-            print "Save File: Cloud Drive connection failed Error: " + response.text
-            print "Retry " + str(tries)
+            print(url)
+            print("Save File: Cloud Drive connection failed Error: "
+                  + response.text)
+            print("Retry " + str(tries))
             sleep_length = float(1 << tries) / 2
             time.sleep(sleep_length)
             response = requests.get(url, headers=headers, stream=True)
@@ -439,12 +423,12 @@ class CloudDriveStorageService(StorageService):
         lastModifiedDateTimeString = cur_file['modifiedDate']
         modifiedDate = parse(lastModifiedDateTimeString)
 
-        os.utime(local_path, (time.mktime(modifiedDate.timetuple()),time.mktime(modifiedDate.timetuple())))
+        os.utime(local_path, (time.mktime(modifiedDate.timetuple()),
+                              time.mktime(modifiedDate.timetuple())))
 
-        print local_path + " has been saved to disk"
+        print(local_path + " has been saved to disk")
         # TODO: deal with return values.
         return (local_path, lastModifiedDateTimeString)
-
 
     def create_folder(self, folder_path):
         self.get_folder(self.root_folder, folder_path, create=True)
@@ -453,7 +437,9 @@ class CloudDriveStorageService(StorageService):
         if folder_path is None or len(folder_path) == 0 or folder_path == "/":
             return True
         try:
-            result = self.get_folder(self.root_folder, folder_path, create=False)
+            result = self.get_folder(self.root_folder,
+                                     folder_path,
+                                     create=False)
             if result is None:
                 return False
             return True
@@ -461,12 +447,13 @@ class CloudDriveStorageService(StorageService):
             return False
 
     def list_folder(self, folder_path):
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
         base_folder = self.root_folder
-        if folder_path is not None and len(folder_path) > 0 and folder_path != "/":
-            base_folder = self.get_folder(base_folder, folder_path, create=False)
-        print "Getting listing for {}".format(folder_path)
+        if (folder_path is not None and (len(folder_path) > 0 and
+                                         folder_path != "/")):
+            base_folder = self.get_folder(base_folder,
+                                          folder_path,
+                                          create=False)
+        print("Getting listing for {}".format(folder_path))
         folder_list = self.get_folder_listing(base_folder, [])
         return folder_list
 
@@ -475,7 +462,6 @@ class CloudDriveStorageService(StorageService):
         access_token = self.get_access_token(refresh_token)
 
         result_list = []
-
 
         headers = {}
         headers['Authorization'] = "Bearer " + access_token
@@ -491,13 +477,14 @@ class CloudDriveStorageService(StorageService):
 
             tries = 0
             while response.status_code != requests.codes.ok and tries < 6:
-                tries+=1
-                print "Error Status code: "+str(response.status_code)
+                tries += 1
+                print("Error Status code: "+str(response.status_code))
                 if response.status_code == 404:
-                    logging.info("Item not found: "+ cur_folder)
-                    raise RuntimeError("Item not found. Possible bad path: "+cur_folder)
-                print "Cloud Drive connection failed Error: "+ response.text
-                print "Attempt: "+ str(tries)
+                    logging.info("Item not found: " + cur_folder)
+                    raise RuntimeError("Item not found. Possible bad path: "
+                                       + cur_folder)
+                print("Cloud Drive connection failed Error: " + response.text)
+                print("Attempt: " + str(tries))
                 sleep_length = float(1 << tries)
                 time.sleep(sleep_length)
                 response = requests.get(url, headers=headers)
@@ -521,7 +508,8 @@ class CloudDriveStorageService(StorageService):
             if current_item['kind'] == "FOLDER":
                 new_list = list(path_list)
                 new_list.append(current_item['name'])
-                result_list.extend(self.get_folder_listing(current_item['id'], new_list))
+                result_list.extend(self.get_folder_listing(
+                    current_item['id'], new_list))
 
         return result_list
 
