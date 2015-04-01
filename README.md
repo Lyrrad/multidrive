@@ -63,16 +63,21 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-03-31 0.1.2: Bug Fixes
+				  Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.
+
 2015-03-31 0.1.1: Bug Fixes
 				  Added debug option (-b)
 
-2015-03-30 0.1.0: Changed to Python 3 to allow 32-bit systems to upload files greater than 2GB in size.
+2015-03-30 0.1.0: Changed to Python 3 to try to allow 32-bit systems to upload files greater than 4GB in size to Cloud Drive.
 				  Removed PyDrive as it is not supported in Python 3.
 				  Added new authenticaion method for Google Drive due to removal of PyDrive.  You'll need to rename the client_secrets.json file to google_drive_client_secrets.json and reauthenticate.
 				  Added prompt to acknowledge risks if malware detected by Google Drive
 				  Bug Fixes
 
+## Known issues
 
+On a 32-bit system, can't upload files bigger than 4GB to Amazon Cloud Drive. It is an issue with requests-toolbelt and has been reported.
 
 ## Requirements
 
@@ -82,7 +87,7 @@ google-api-python-client now supports Python 3, though it requires an updated ht
 
 This can be installed by running:
 wget https://github.com/jcgregorio/httplib2/archive/master.zip
-	
+unzip master.zip
 cd httplib2-master
 python3 ./setup.py install
 pip install google-api-python-client
@@ -93,11 +98,14 @@ pip install python-dateutil
 
 ## Google Drive setup
 
-See http://pythonhosted.org/PyDrive/quickstart.html for details on authentication.
+Go to https://code.google.com/apis/console with your Google Account.
 
-In short, go to the APIs console and create a new Drive API project and put the client_secrets.json file in the working directory of this program, but name it google_drive_client_secrets.json
+Create a new project.
+Under API's and Auth, enable the Drive API.
+In Credentials: Create a new Client ID for an "Installed Application"
+Download the JSON file, put it in the working directory and name it google_drive_client_secrets.json
 
-Credentials are stored in credentials.json after authentication.
+Credentials are stored in google_drive_settings.dat after authentication.
 
 ## OneDrive Setup
 
