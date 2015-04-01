@@ -22,9 +22,11 @@ import os
 import json
 import logging
 from mimetypes import guess_type
+import hashlib
 
 import apiclient
-from apiclient.http import MediaFileUpload
+# from apiclient.http import MediaFileUpload
+from apiclient.http import MediaIoBaseUpload
 
 from oauth2client import client
 from oauth2client.file import Storage
@@ -34,6 +36,45 @@ import httplib2
 import time
 
 from storageservice import StorageService
+
+
+class HashFile(object):
+    def set_file(self, cur_file):
+        self.file = cur_file
+        self.cur_file_hash = hashlib.md5()
+        self.begin = False
+        self.last_hash_pos = 0
+        if self.file.tell() == 0:
+            self.begin = True
+
+        pos = self.file.tell()
+        self.file.seek(0, os.SEEK_END)
+        self.length = self.file.tell()-pos
+        self.file.seek(pos, os.SEEK_SET)
+
+    def __len__(self):
+        return self.length
+
+    def seek(self, offset, whence=os.SEEK_SET):
+        self.file.seek(offset, whence)
+        if self.begin is False and self.file.tell() == 0:
+            self.begin = True
+
+    def tell(self):
+        return self.file.tell()
+
+    def read(self, *args):
+        chunk = self.file.read(*args)
+        if len(chunk) > 0 and self.begin is True:
+            if self.file.tell()-len(chunk) == self.last_hash_pos:
+                self.cur_file_hash.update(chunk)
+                self.last_hash_pos += len(chunk)
+        return chunk
+
+    def get_md5(self):
+        if self.last_hash_pos == self.length:
+            return self.cur_file_hash.hexdigest()
+        raise RuntimeError("Did not complete hash of file.")
 
 
 class ItemDoesNotExistError(RuntimeError):
@@ -144,7 +185,7 @@ class GoogleDriveStorageService(StorageService):
 
     def download_file(self, file_path, destination=None, overwrite=False):
         cur_file = self.get_file(file_path)
-        return self.download_item(cur_file, desintation=destination,
+        return self.download_item(cur_file, destination=destination,
                                   overwrite=overwrite, create_folder=False)
 
     def download_item(self, cur_file, destination=None, overwrite=False,
@@ -170,7 +211,8 @@ class GoogleDriveStorageService(StorageService):
 
         fd = open(local_path, 'wb')
         try:
-            self.download_helper(cur_file['id'], fd, cur_file['title'])
+            self.download_helper(cur_file['id'], fd, cur_file['title'],
+                                 cur_file['md5Checksum'])
         finally:
             fd.close()
 
@@ -179,7 +221,7 @@ class GoogleDriveStorageService(StorageService):
                  time.mktime(modified_date.timetuple())))
         return (local_path, cur_file['modifiedDate'])
 
-    def download_helper(self, file_id, local_fd, file_name):
+    def download_helper(self, file_id, local_fd, file_name, remote_hash):
         now = datetime.datetime.utcnow() + datetime.timedelta(minutes=1)
         expiry = self.__credentials__.token_expiry
         if now > expiry:
@@ -239,8 +281,10 @@ class GoogleDriveStorageService(StorageService):
             raise RuntimeError("Unable to access Google Drive file")
 
         size = 0
+        cur_file_hash = hashlib.md5()
         for chunk in response.iter_content(chunk_size=1024*1024):
             if chunk:  # filter out keep-alive new chunks
+                cur_file_hash.update(chunk)
                 local_fd.write(chunk)
                 local_fd.flush()
                 size = size + 1
@@ -248,77 +292,92 @@ class GoogleDriveStorageService(StorageService):
                     logging.info(str(size) + "MB written")
         os.fsync(local_fd.fileno())
 
+        if remote_hash.lower() != cur_file_hash.hexdigest():
+            raise RuntimeError("Hash of downloaded file does "
+                               "not match server.")
+
     def upload_file(self, file_path, folder=None, modified_time=None,
                     create_folder=False, overwrite=False):
-        try:
-            open(file_path)
-        except IOError as e:
-            raise IOError("Unable to open file. Error: "+str(e))
-        logging.debug("Uploading " + file_path)
+        logger = logging.getLogger("multidrive")
+        with open(file_path, 'rb') as cur_open_file:
 
-        file_name = os.path.basename(file_path)
-        mime_type = guess_type(file_path)[0]
-        mime_type = mime_type if mime_type else 'application/octet-stream'
+            logger.debug("Uploading " + file_path)
 
-        file_size = os.path.getsize(file_path)
+            file_name = os.path.basename(file_path)
+            mime_type = guess_type(file_path)[0]
+            mime_type = mime_type if mime_type else 'application/octet-stream'
 
-        media_body = MediaFileUpload(file_path, mimetype=mime_type,
-                                     chunksize=1024*1024, resumable=True)
-        if file_size == 0:
-            media_body = None
-        parents = []
-        cur_folder = 'root'
-        if folder is not None:
-            cur_folder = self.get_folder(folder, create=create_folder)
-            parents.append({"id": cur_folder})
+            file_size = os.path.getsize(file_path)
 
-        if modified_time is None:
-            modified_time = datetime.datetime.fromtimestamp(
-                os.path.getmtime(file_path),
-                UTC()).isoformat()[:-6]
+            cur_hash_file = HashFile()
+            cur_hash_file.set_file(cur_open_file)
+
+            # media_body = MediaFileUpload(file_path, mimetype=mime_type,
+            #                              chunksize=1024*1024, resumable=True)
+            media_body = MediaIoBaseUpload(cur_hash_file, mimetype=mime_type,
+                                           chunksize=1024*1024, resumable=True)
+            if file_size == 0:
+                media_body = None
+            parents = []
+            cur_folder = 'root'
+            if folder is not None:
+                cur_folder = self.get_folder(folder, create=create_folder)
+                parents.append({"id": cur_folder})
+
+            if modified_time is None:
+                modified_time = datetime.datetime.fromtimestamp(
+                    os.path.getmtime(file_path),
+                    UTC()).isoformat()[:-6]
+                if '.' not in modified_time:
+                    modified_time += ".000000Z"
+                else:
+                    modified_time += "Z"
+
+            # OneDrive returns times that happen to lie on the second without
+            # the microseconds at the end.
             if '.' not in modified_time:
-                modified_time += ".000000Z"
-            else:
-                modified_time += "Z"
+                    modified_time = modified_time.replace("Z", ".000000Z")
+            logging.debug("Modified time: "+modified_time)
 
-        # OneDrive returns times that happen to lie on the second without the
-        # microseconds at the end.
-        if '.' not in modified_time:
-                modified_time = modified_time.replace("Z", ".000000Z")
-        logging.debug("Modified time: "+modified_time)
+            existing_file = self.get_file_if_exists(file_name, cur_folder)
 
-        existing_file = self.get_file_if_exists(file_name, cur_folder)
+            try:
+                # cur_file = None
 
-        try:
-            # cur_file = None
+                if existing_file is not None:
+                    if overwrite is False:
+                        raise RuntimeError("File already exists")
+                    old_file = self.__service__.files().get(
+                        fileId=existing_file['id']).execute()
+                    old_file['modifiedDate'] = modified_time
+                    old_file['title'] = file_name
+                    old_file['mimeType'] = mime_type
+                    old_file['parents'] = parents
+                    new_file = self.__service__.files().update(
+                        fileId=existing_file['id'],
+                        body=old_file,
+                        media_body=media_body).execute()
 
-            if existing_file is not None:
-                if overwrite is False:
-                    raise RuntimeError("File already exists")
-                old_file = self.__service__.files().get(
-                    fileId=existing_file['id']).execute()
-                old_file['modifiedDate'] = modified_time
-                old_file['title'] = file_name
-                old_file['mimeType'] = mime_type
-                old_file['parents'] = parents
-                self.__service__.files().update(
-                    fileId=existing_file['id'],
-                    body=old_file,
-                    media_body=media_body).execute()
-            else:
-                body = {
-                    'title': file_name,
-                    'mimeType': mime_type,
-                    'parents': parents,
-                    'modifiedDate': modified_time,
-                }
-                self.__service__.files().insert(
-                    body=body,
-                    media_body=media_body).execute()
+                else:
+                    body = {
+                        'title': file_name,
+                        'mimeType': mime_type,
+                        'parents': parents,
+                        'modifiedDate': modified_time,
+                    }
+                    new_file = self.__service__.files().insert(
+                        body=body,
+                        media_body=media_body).execute()
 
-        except apiclient.errors.HttpError as error:
-            print('An error occured uploading file: %s' % error)
-            return None
+            except apiclient.errors.HttpError as error:
+                print('An error occured uploading file: %s' % error)
+                return None
+            logger.info('Calculated MD5 of uploaded file:' +
+                        cur_hash_file.get_md5())
+            logger.info('Google Drive Checksum: ' + new_file['md5Checksum'])
+            if (cur_hash_file.get_md5() != new_file['md5Checksum']):
+                raise RuntimeError("Hash of uploaded file does "
+                                   "not match server.")
 
     def get_file_if_exists(self, file_name, folder_id):
         query = ("'{}' in parents and trashed=false and "

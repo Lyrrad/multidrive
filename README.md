@@ -60,8 +60,12 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 |List Quota	|Pending|Pending|Pending|Pending|
 |Delete Remote File	|Pending|Pending|Pending|Pending|
 |Move Folders	|Yes|Yes|Yes|Pending|
+|Verify Files by Hash|Yes|Yes|Yes|Pending|
 
 ## Updates
+
+2015-04-01 0.1.4: Bug Fixes
+				  Added Hash check upon upload and download to confirm files properly transferred.
 
 2015-04-01 0.1.3: Bug Fixes
 				  Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.

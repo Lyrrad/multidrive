@@ -24,7 +24,7 @@ import urllib
 from urllib.parse import urlparse, parse_qs
 import os
 from enum import Enum
-
+import hashlib
 import logging
 
 import time
@@ -307,9 +307,11 @@ class OneDriveStorageService(StorageService):
 
         # TODO: Deal with insufficient Storage error (507)
         # TODO: Deal with other 400/500 series errors
+        cur_file_hash = hashlib.sha1()
         with open(file_path, "rb") as f:
             while chunk_start < file_size:
                 chunk_data = f.read(CHUNK_SIZE)
+                cur_file_hash.update(chunk_data)
                 headers = {}
                 headers['Content-Length'] = str(file_size)
                 headers['Content-Range'] = 'bytes {}-{}/{}'.format(chunk_start,
@@ -342,9 +344,16 @@ class OneDriveStorageService(StorageService):
                 if chunk_end+1 >= file_size:
                     chunk_end = file_size - 1
 
-        if response is not None:
-            logger.info(response.status_code)
-            logger.info(response.text)
+        logger.info(response.status_code)
+        logger.info(response.text)
+
+        server_hash = json.loads(response.text)['file']['hashes']['sha1Hash']
+
+        logger.info("SHA1 local:"+cur_file_hash.hexdigest())
+        logger.info("SHA1 remote:"+server_hash)
+        if (cur_file_hash.hexdigest() != server_hash.lower()):
+            raise RuntimeError("Hash of uploaded file does "
+                               "not match server.")
         print("Upload of file {} complete".format(os.path.basename(file_name)))
 
     def download_helper(self, url, local_path):
@@ -366,8 +375,10 @@ class OneDriveStorageService(StorageService):
                                      max_tries=8)
 
         size = 0
+        cur_file_hash = hashlib.sha1()
         for chunk in response.iter_content(chunk_size=4*1024*1024):
             if chunk:  # filter out keep-alive new chunks
+                cur_file_hash.update(chunk)
                 f.write(chunk)
                 f.flush()
                 size = size + 1
@@ -375,6 +386,7 @@ class OneDriveStorageService(StorageService):
                     logger.info(str(size)*4 + "MB written")
         os.fsync(f.fileno())
         f.close()
+        return cur_file_hash.hexdigest()
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
@@ -395,7 +407,17 @@ class OneDriveStorageService(StorageService):
                                "option to continue.".format(local_path))
         url = self.onedrive_url_root+"/drive/items/"+cur_file['id']+"/content"
 
-        self.download_helper(url, local_path)
+        cur_file_hash = self.download_helper(url, local_path)
+
+        # API documentation states that hashes may not be available until after
+        # Item is downloaded
+        if 'sha1Hash' not in cur_file['file']['hashes']:
+            cur_file = self.get_item(item_id=cur_file['id'])
+        remote_hash = cur_file['file']['hashes']['sha1Hash']
+
+        if (cur_file_hash != remote_hash.lower()):
+            raise RuntimeError("Hash of downloaded file does "
+                               "not match server.")
 
         lastModifiedDateTimeString = cur_file['lastModifiedDateTime']
         modifiedDate = parse(lastModifiedDateTimeString)
@@ -410,70 +432,34 @@ class OneDriveStorageService(StorageService):
     def download(self, file_path, destination=None, overwrite=False):
         print("Download {} OneDrive Storage Service".format(file_path))
 
-        local_path = file_path.split('/')[-1]
-
-        if destination is not None:
-            local_path = os.path.join(destination, local_path)
-
-        if os.path.isdir(local_path):
-            raise RuntimeError("Local destination is a folder")
-        if overwrite is False and os.path.isfile(local_path):
-            raise RuntimeError("Local file {} exists.  Enable overwrite "
-                               "option to continue.".format(local_path))
-
-        url = (self.onedrive_url_root+"/drive/root:/" +
-               urllib.parse.quote(file_path)+":/content")
-
-        self.download_helper(url, local_path)
-
-        lastModifiedDateTimeString = self.get_modified_time(file_path)
-        modifiedDate = parse(lastModifiedDateTimeString)
-
-        os.utime(local_path, (time.mktime(modifiedDate.timetuple()),
-                              time.mktime(modifiedDate.timetuple())))
-
-        print(local_path + " has been saved to disk")
-        # TODO: deal with return values.
-        return (local_path, lastModifiedDateTimeString)
-
-    # Due to a issue with OneDrive API, Modified time doesn't match time in
-    # Web or Desktop OneDrive Clients
-    def get_modified_time(self, file_path):
-        if file_path.endswith('/'):
-            file_path = file_path[:-1]
-
-        url = (self.onedrive_url_root+"/drive/root:/" +
-               urllib.parse.quote(file_path))
-
-        status_codes = (requests.codes.ok,)
-        response = self.http_request(url=url,
-                                     request_type=RequestType.GET,
-                                     status_codes=status_codes,
-                                     use_access_token=True,
-                                     action_string="Get Modified Time",
-                                     max_tries=8)
-
-        data = json.loads(response.text)
-
-        if "lastModifiedDateTime" not in data:
-            raise RuntimeError("Last Modified date/time does not exist")
-        return data["lastModifiedDateTime"]
+        cur_file = self.get_item(item_path=file_path)
+        if 'folder' in cur_file:
+            raise RuntimeError("Remote destination is a folder")
+        return self.download_item(cur_file, destination, overwrite)
 
     def is_folder(self, folder_path):
-        result = self.get_item(folder_path)
+        result = self.get_item(item_path=folder_path)
         if result is None:
             return False
         return "folder" in result
 
-    def get_item(self, item_path):
+    def get_item(self, item_path=None, item_id=None):
         logger = logging.getLogger("multidrive")
 
-        if item_path.endswith('/'):
-            item_path = item_path[:-1]
+        if item_path is not None:
+            if item_id is not None:
+                raise RuntimeError("Just one of item_path and item_id "
+                                   "should be specified")
+            if item_path.endswith('/'):
+                item_path = item_path[:-1]
 
-        url = (self.onedrive_url_root+"/drive/root:/" +
-               urllib.parse.quote(item_path))
-
+            url = (self.onedrive_url_root+"/drive/root:/" +
+                   urllib.parse.quote(item_path))
+        elif item_id is not None:
+            url = self.onedrive_url_root+"/drive/items/" + item_id
+        else:
+            raise RuntimeError("One of item_path and item_id "
+                               "should be specified")
         status_codes = (requests.codes.ok,
                         requests.codes.not_found)
 
@@ -548,7 +534,7 @@ class OneDriveStorageService(StorageService):
         base_folder = None
         if folder_path is None:
             folder_path = ""
-        base_folder = self.get_item(folder_path)
+        base_folder = self.get_item(item_path=folder_path)
 
         if "folder" not in base_folder:
             raise RuntimeError("Invalid folder: "+folder_path)
