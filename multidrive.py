@@ -129,6 +129,9 @@ def main():
             new_path.append(service.get_file_name(cur_file))
             print("/".join(new_path))
     elif args.action[0].lower() == "copy":
+        if args.destination is None:
+            raise ValueError("Please specify a destination for copy "
+                             "operation.")
         service2 = get_storage_service(args.destination[0])
         service2.authorize()
         if service2 is None:

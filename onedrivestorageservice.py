@@ -23,6 +23,7 @@ import datetime
 import urllib
 from urllib.parse import urlparse, parse_qs
 import os
+from enum import Enum
 
 import logging
 
@@ -52,6 +53,12 @@ class UTC(datetime.tzinfo):
         return datetime.timedelta(0)
 
 
+class RequestType(Enum):
+    GET = 0
+    PUT = 1
+    POST = 2
+
+
 class OneDriveStorageService(StorageService):
 
     onedrive_url_root = "https://api.onedrive.com/v1.0"
@@ -77,9 +84,12 @@ class OneDriveStorageService(StorageService):
                 'grant_type': 'authorization_code'}
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         url = 'https://login.live.com/oauth20_token.srf'
-        response = self.post_request(url, (requests.codes.ok,),
+        response = self.http_request(url=url,
+                                     request_type=RequestType.POST,
+                                     status_codes=(requests.codes.ok,),
                                      headers=headers,
-                                     data=data, use_access_token=False,
+                                     data=data,
+                                     use_access_token=False,
                                      action_string="OneDrive Get Tokens "
                                      "From Code")
         data = json.loads(response.text)
@@ -87,112 +97,24 @@ class OneDriveStorageService(StorageService):
                 data['access_token'],
                 int(data['expires_in']))
 
-    def post_request(self, url, status_codes, headers={}, data={},
-                     use_access_token=False, action_string="OneDrive Post",
+    def http_request(self, url, request_type, status_codes=(), headers={},
+                     stream=False, data="", params=None,
+                     severe_status_codes=(),
+                     use_access_token=False, action_string="OneDrive HTTP",
                      max_tries=6):
         logger = logging.getLogger("multidrive")
 
         if use_access_token is True:
-            headers['Authorization'] = "bearer " + self.get_access_token()
-        response = requests.post(url, headers=headers, data=data)
+            headers['Authorization'] = "Bearer " + self.get_access_token()
 
-        tries = 0
-        while (response.status_code not in status_codes
-               and tries < max_tries):
-            tries += 1
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
-            logger.warning("Retry " + str(tries))
-
-            sleep_length = float(1 << tries) / 2
-
-            if 'Retry-After' in response.headers:
-                sleep_length = int(response.headers['Retry-After'])
-            logger.warning("Waiting {} second(s) for next attempt"
-                           .format(str(sleep_length)))
-
-            time.sleep(sleep_length)
-            if use_access_token is True:
-                headers['Authorization'] = "bearer " + self.get_access_token()
-            # Force refresh of token once in case it's expired
-            if (tries == 1):
-                self.refresh_access_token()
-            response = requests.post(url, headers=headers, data=data)
-
-        if response.status_code not in status_codes:
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
-            logger.warning("Retry " + str(tries))
-            raise RemoteConnectionError("{}: Unable to complete request."
-                                        .format(action_string))
-
-        return response
-
-    def put_request(self, url, status_codes=(), headers={}, data="",
-                    params=None,
-                    use_access_token=False, action_string="OneDrive Put",
-                    max_tries=6):
-        logger = logging.getLogger("multidrive")
-
-        if use_access_token is True:
-            headers['Authorization'] = "bearer " + self.get_access_token()
-
-        response = requests.put(url, headers=headers, data=data,
-                                params=params)
-
-        tries = 0
-        while (response.status_code not in status_codes
-               and tries < max_tries):
-            tries += 1
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
-            logger.warning("Retry " + str(tries))
-
-            # Force refresh of token once in case it's expired
-
-            sleep_length = float(1 << tries) / 2
-
-            if 'Retry-After' in response.headers:
-                sleep_length = int(response.headers['Retry-After'])
-            logger.warning("Waiting {} second(s) for next attempt"
-                           .format(str(sleep_length)))
-
-            time.sleep(sleep_length)
-            if (tries == 1):
-                self.refresh_access_token()
-
-            if use_access_token is True:
-                headers['Authorization'] = "bearer " + self.get_access_token()
+        if request_type == RequestType.GET:
+            response = requests.get(url, headers=headers, params=params,
+                                    stream=stream)
+        elif request_type == RequestType.PUT:
             response = requests.put(url, headers=headers, data=data,
                                     params=params)
-
-        if response.status_code not in status_codes:
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
-            logger.warning("Retry " + str(tries))
-            raise RemoteConnectionError("{}: Unable to complete request."
-                                        .format(action_string))
-
-        return response
-
-    def get_request(self, url, status_codes=(), headers={},
-                    stream=False,
-                    severe_status_codes=(),
-                    use_access_token=False, action_string="OneDrive Get",
-                    max_tries=6):
-        logger = logging.getLogger("multidrive")
-
-        if use_access_token is True:
-            headers['Authorization'] = "bearer " + self.get_access_token()
-        response = requests.get(url, headers=headers, stream=stream)
+        elif request_type == RequestType.POST:
+            response = requests.post(url, headers=headers, data=data)
 
         tries = 0
         while (response.status_code not in status_codes
@@ -222,8 +144,15 @@ class OneDriveStorageService(StorageService):
                 self.refresh_access_token()
 
             if use_access_token is True:
-                headers['Authorization'] = "bearer " + self.get_access_token()
-            response = requests.get(url, headers=headers, stream=stream)
+                headers['Authorization'] = "Bearer " + self.get_access_token()
+
+            if request_type == RequestType.GET:
+                response = requests.get(url, headers=headers, params=params,
+                                        stream=stream)
+            elif request_type == RequestType.PUT:
+                requests.put(url, headers=headers, data=data, params=params)
+            elif request_type == RequestType.POST:
+                requests.post(url, headers=headers, data=data)
 
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"
@@ -250,9 +179,12 @@ class OneDriveStorageService(StorageService):
                 'grant_type': 'refresh_token'}
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         url = 'https://login.live.com/oauth20_token.srf'
-        response = self.post_request(url, (requests.codes.ok,),
+        response = self.http_request(url=url,
+                                     request_type=RequestType.POST,
+                                     status_codes=(requests.codes.ok,),
                                      headers=headers,
-                                     data=data, use_access_token=False,
+                                     data=data,
+                                     use_access_token=False,
                                      action_string="OneDrive Refresh Access"
                                      "Token")
 
@@ -331,14 +263,17 @@ class OneDriveStorageService(StorageService):
         if file_size == 0:
             url = (self.onedrive_url_root+"/drive/root:/" +
                    urllib.parse.quote(full_remote_path)+":/content")
-            response = self.put_request(url,
-                                        status_codes=(requests.codes.ok,
-                                                      requests.codes.created,
-                                                      requests.codes.accepted,
-                                                      requests.codes.conflict),
-                                        data="", params=payload,
-                                        use_access_token=True,
-                                        action_string="Upload")
+            response = self.http_request(url=url,
+                                         request_type=RequestType.PUT,
+                                         status_codes=(requests.codes.ok,
+                                                       requests.codes.created,
+                                                       requests.codes.accepted,
+                                                       requests.codes.
+                                                       conflict),
+                                         data="",
+                                         params=payload,
+                                         use_access_token=True,
+                                         action_string="Upload")
 
             if response.status_code in (requests.codes.conflict,):
                 raise RuntimeError("File already exists")
@@ -351,7 +286,9 @@ class OneDriveStorageService(StorageService):
 
         url = (self.onedrive_url_root+"/drive/root:/" +
                urllib.parse.quote(full_remote_path)+":/upload.createSession")
-        response = self.post_request(url, (requests.codes.ok,),
+        response = self.http_request(url=url,
+                                     request_type=RequestType.POST,
+                                     status_codes=(requests.codes.ok,),
                                      headers=headers,
                                      data=json.dumps(payload),
                                      use_access_token=True,
@@ -382,12 +319,13 @@ class OneDriveStorageService(StorageService):
                                 requests.codes.created,
                                 requests.codes.accepted,
                                 requests.codes.conflict)
-                response = self.put_request(data["uploadUrl"],
-                                            headers=headers,
-                                            status_codes=status_codes,
-                                            data=chunk_data,
-                                            use_access_token=True,
-                                            action_string="Upload Chunk")
+                response = self.http_request(url=data["uploadUrl"],
+                                             request_type=RequestType.PUT,
+                                             headers=headers,
+                                             status_codes=status_codes,
+                                             data=chunk_data,
+                                             use_access_token=True,
+                                             action_string="Upload Chunk")
                 # TODO: Check for proper response based on
                 # location in file uploading.
 
@@ -418,12 +356,14 @@ class OneDriveStorageService(StorageService):
         status_codes = (requests.codes.ok,)
         severe_status_codes = (requests.codes.bandwidth_limit_exceeded,
                                requests.codes.service_unavailable)
-        response = self.get_request(url, status_codes=status_codes,
-                                    stream=True,
-                                    severe_status_codes=severe_status_codes,
-                                    use_access_token=True,
-                                    action_string="Download file",
-                                    max_tries=8)
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     stream=True,
+                                     severe_status_codes=severe_status_codes,
+                                     use_access_token=True,
+                                     action_string="Download file",
+                                     max_tries=8)
 
         size = 0
         for chunk in response.iter_content(chunk_size=4*1024*1024):
@@ -506,10 +446,12 @@ class OneDriveStorageService(StorageService):
                urllib.parse.quote(file_path))
 
         status_codes = (requests.codes.ok,)
-        response = self.get_request(url, status_codes=status_codes,
-                                    use_access_token=True,
-                                    action_string="Get Modified Time",
-                                    max_tries=8)
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get Modified Time",
+                                     max_tries=8)
 
         data = json.loads(response.text)
 
@@ -535,10 +477,12 @@ class OneDriveStorageService(StorageService):
         status_codes = (requests.codes.ok,
                         requests.codes.not_found)
 
-        response = self.get_request(url, status_codes=status_codes,
-                                    use_access_token=True,
-                                    action_string="Get Item",
-                                    max_tries=8)
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get Item",
+                                     max_tries=8)
 
         if response.status_code == requests.codes.not_found:
             logger.info("Item not found: " + item_path)
@@ -565,9 +509,9 @@ class OneDriveStorageService(StorageService):
             if self.is_folder(cur_path):
                 continue
 
-            print("prev_path: " + prev_path)
-            print("cur_item: " + cur_item)
-            print("cur_path: " + cur_path)
+            logger.info("prev_path: " + prev_path)
+            logger.info("cur_item: " + cur_item)
+            logger.info("cur_path: " + cur_path)
             headers = {'Content-Type': "application/json"}
 
             payload = {}
@@ -580,12 +524,15 @@ class OneDriveStorageService(StorageService):
             else:
                 url = (self.onedrive_url_root+"/drive/root:/" +
                        urllib.parse.quote(prev_path)+":/children")
-            print("url: " + url)
+            logger.info("url: " + url)
 
-            response = self.post_request(url, (requests.codes.ok,
-                                               requests.codes.created,
-                                               requests.codes.accepted,
-                                               requests.codes.not_found),
+            response = self.http_request(url=url,
+                                         request_type=RequestType.POST,
+                                         status_codes=(requests.codes.ok,
+                                                       requests.codes.created,
+                                                       requests.codes.accepted,
+                                                       requests.codes.
+                                                       not_found),
                                          headers=headers,
                                          data=json.dumps(payload),
                                          use_access_token=True,
@@ -622,10 +569,12 @@ class OneDriveStorageService(StorageService):
         status_codes = (requests.codes.ok,
                         requests.codes.not_found)
 
-        response = self.get_request(url, status_codes=status_codes,
-                                    use_access_token=True,
-                                    action_string="Get Folder Listing",
-                                    max_tries=8)
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get Folder Listing",
+                                     max_tries=8)
 
         if response.status_code == requests.codes.not_found:
             logger.info("Item not found: " + current_path)

@@ -63,6 +63,10 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-01 0.1.3: Bug Fixes
+				  Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.
+				  Refactored OneDrive HTTP requests for robustness.
+
 2015-03-31 0.1.2: Bug Fixes
 				  Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.
 

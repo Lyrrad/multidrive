@@ -30,6 +30,7 @@ from requests_toolbelt import MultipartEncoder
 import time
 
 from storageservice import StorageService
+from enum import Enum
 
 
 class ItemDoesNotExistError(RuntimeError):
@@ -38,6 +39,16 @@ class ItemDoesNotExistError(RuntimeError):
 
 class WrongTypeError(RuntimeError):
     pass
+
+
+class RemoteConnectionError(RuntimeError):
+    pass
+
+
+class RequestType(Enum):
+    GET = 0
+    PUT = 1
+    POST = 2
 
 
 class UTC(datetime.tzinfo):
@@ -73,36 +84,125 @@ class CloudDriveStorageService(StorageService):
         # If there's an error loading file, tell the user, as ask for client_id
         # and secret
 
-        # TODO: Store refresh token in class and check expiry
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-        self.load_end_points(access_token)
-        self.load_root_folder(access_token)
-        print("refresh token: " + refresh_token)
-        print("access token: " + access_token)
+        self.load_tokens()
+        self.load_end_points()
+        self.load_root_folder()
 
-    def get_refresh_token_from_code(self, code):
+    def http_request(self, url, request_type, status_codes=(), headers={},
+                     stream=False, data="", params=None,
+                     severe_status_codes=(),
+                     use_access_token=False, action_string="OneDrive HTTP",
+                     max_tries=6,
+                     use_multipart_encoder=False,
+                     multipart_encoder_fields=None,
+                     multipart_encoder_content=None):
+        logger = logging.getLogger("multidrive")
+
+        if use_access_token is True:
+            headers['Authorization'] = "Bearer " + self.get_access_token()
+
+        if use_multipart_encoder is True:
+            cur_multipart_file = open(multipart_encoder_content[1], 'rb')
+            cur_multipart_content = ('content', (multipart_encoder_content[0],
+                                                 cur_multipart_file,
+                                                 multipart_encoder_content[2]))
+            multipart_encoder_fields.append(cur_multipart_content)
+            data = MultipartEncoder(fields=multipart_encoder_fields)
+            headers["Content-Type"] = data.content_type
+        if request_type == RequestType.GET:
+            response = requests.get(url, headers=headers, params=params,
+                                    stream=stream)
+        elif request_type == RequestType.PUT:
+            response = requests.put(url, headers=headers, data=data,
+                                    params=params)
+        elif request_type == RequestType.POST:
+            response = requests.post(url, headers=headers, data=data)
+
+        if use_multipart_encoder is True:
+            cur_multipart_file.close()
+
+        tries = 0
+        while (response.status_code not in status_codes
+               and tries < max_tries):
+            tries += 1
+            logger.warning("{}: Connection failed Code: {}"
+                           .format(action_string, str(response.status_code)))
+            logger.warning("Error: {}".format(response.text))
+            logger.warning("Headers: {}".format(str(response.headers)))
+            logger.warning("Retry " + str(tries))
+
+            sleep_length = float(1 << tries) / 2
+
+            if 'Retry-After' in response.headers:
+                logger.warning("Server requested wait of {} seconds".
+                               format(response.headers['Retry-After']))
+                sleep_length = int(response.headers['Retry-After'])
+            elif response.status_code in severe_status_codes:
+                logger.warning("Server Error, increasing wait time")
+                sleep_length *= 20
+            logger.warning("Waiting {} second(s) for next attempt"
+                           .format(str(sleep_length)))
+
+            time.sleep(sleep_length)
+            # Force refresh of token once in case it's expired
+            if (tries == 1):
+                self.refresh_access_token()
+
+            if use_access_token is True:
+                headers['Authorization'] = "Bearer " + self.get_access_token()
+
+            if use_multipart_encoder is True:
+                cur_multipart_file = open(multipart_encoder_content[1])
+                cur_multipart_content = ('content',
+                                         (multipart_encoder_content[0],
+                                          cur_multipart_file,
+                                          multipart_encoder_content[2]))
+                multipart_encoder_fields.append(cur_multipart_content)
+                data = MultipartEncoder(fields=multipart_encoder_fields)
+
+            if request_type == RequestType.GET:
+                response = requests.get(url, headers=headers, params=params,
+                                        stream=stream)
+            elif request_type == RequestType.PUT:
+                requests.put(url, headers=headers, data=data, params=params)
+            elif request_type == RequestType.POST:
+                requests.post(url, headers=headers, data=data)
+
+            if use_multipart_encoder is True:
+                cur_multipart_file.close()
+
+        if response.status_code not in status_codes:
+            logger.warning("{}: Connection failed Code: {}"
+                           .format(action_string, str(response.status_code)))
+            logger.warning("Error: {}".format(response.text))
+            logger.warning("Headers: {}".format(str(response.headers)))
+            logger.warning("Retry " + str(tries))
+            raise RemoteConnectionError("{}: Unable to complete request."
+                                        .format(action_string))
+
+        return response
+
+    def get_tokens_from_code(self, code):
         data = {'client_id': self.__client_id__,
                 'redirect_uri': self.__return_uri__,
                 'client_secret': self.__client_secret__,
                 'code': code,
                 'grant_type': 'authorization_code'}
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        r = requests.post('https://api.amazon.com/auth/o2/token',
-                          data=data,
-                          headers=headers)
-        data = json.loads(r.text)
-        return data['refresh_token']
-        # TODO: Could also get access token and store it along with expiry time
-        # , since it's good for 1 hour
+        url = 'https://api.amazon.com/auth/o2/token'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.POST,
+                                     status_codes=(requests.codes.ok,),
+                                     headers=headers,
+                                     data=data, use_access_token=False,
+                                     action_string="Cloud Drive Get Tokens "
+                                     "From Code")
+        data = json.loads(response.text)
+        return (data['refresh_token'],
+                data['access_token'],
+                int(data['expires_in']))
 
-    def parse_response(self, response):
-        parsed = urllib.parse.parse_qs(
-            urllib.parse.urlparse(response).query)['code'][0]
-        return parsed
-
-    def load_refresh_token(self):
-        logger = logging.getLogger("multidrive")
+    def load_tokens(self):
         refresh_token = None
         try:
             with open('cloud_drive_settings.json', 'r') as f:
@@ -112,7 +212,9 @@ class CloudDriveStorageService(StorageService):
             pass
 
         if refresh_token is not None:
-            return refresh_token
+            self.__refresh_token__ = refresh_token
+            self.refresh_access_token()
+            return
 
         parameters = {'client_id': self.__client_id__,
                       'scope': 'clouddrive:read clouddrive:write',
@@ -123,71 +225,84 @@ class CloudDriveStorageService(StorageService):
               + urllib.parse.urlencode(parameters))
 
         response = input("Enter the URL you were redirected to: ")
-        code = self.parse_response(response)
-        refresh_token = self.get_refresh_token_from_code(code)
+        code = urllib.parse.parse_qs(
+            urllib.parse.urlparse(response).query)['code'][0]
+
+        (refresh_token, access_token, expiry) = self.get_tokens_from_code(code)
 
         if (refresh_token is None):
-            logger.warning("Unable to get refresh token")
-            return None
+            raise RuntimeError("Unable to get refresh token")
 
         config = {'refresh_token': refresh_token}
         with open('cloud_drive_settings.json', 'w') as f:
             json.dump(config, f)
 
-        return refresh_token
+        self.__refresh_token__ = refresh_token
+        self.set_access_token(access_token, expiry)
+        return
 
-    def get_access_token(self, refresh_token):
+    def get_access_token(self):
+        now = datetime.datetime.utcnow()
+        if (now > self.__token__expiry__):
+            self.refresh_access_token()
+        return self.__access_token__
+
+    def set_access_token(self, access_token, expiry):
+        self.__access_token__ = access_token
+        self.__token__expiry__ = (datetime.datetime.utcnow() +
+                                  datetime.timedelta(seconds=(expiry-60)))
+
+    def refresh_access_token(self):
         data = {'client_id': self.__client_id__,
                 'redirect_uri': self.__return_uri__,
                 'client_secret': self.__client_secret__,
-                'refresh_token': refresh_token,
+                'refresh_token': self.__refresh_token__,
                 'grant_type': 'refresh_token'}
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        r = requests.post('https://api.amazon.com/auth/o2/token',
-                          data=data,
-                          headers=headers)
-        data = json.loads(r.text)
-        return data['access_token']
-        # Add abiliy to store new refresh token.
+        url = 'https://api.amazon.com/auth/o2/token'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.POST,
+                                     status_codes=(requests.codes.ok,),
+                                     headers=headers,
+                                     data=data,
+                                     use_access_token=False,
+                                     action_string="Cloud Drive Refresh Access"
+                                     " Token")
 
-    def load_end_points(self, access_token):
-        headers = {}
-        headers['Authorization'] = "Bearer " + access_token
-        r = requests.get(self.cloud_drive_url_root +
-                         '/drive/v1/account/endpoint',
-                         headers=headers)
-        if r.status_code is not requests.codes.ok:
-            print(r.status_code)
-            print(r.text)
-            raise RuntimeError("Error getting endpoints")
-        data = json.loads(r.text)
+        data = json.loads(response.text)
+        self.set_access_token(data['access_token'], int(data['expires_in']))
+        return
+
+    def load_end_points(self):
+        url = self.cloud_drive_url_root + '/drive/v1/account/endpoint'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=(requests.codes.ok,),
+                                     use_access_token=True,
+                                     action_string="Cloud Drive End Points")
+        data = json.loads(response.text)
         if data['customerExists'] is not True:
             raise RuntimeError("Error with account")
         self.content_url = data['contentUrl']
         self.metadata_url = data['metadataUrl']
 
-    def load_root_folder(self, access_token):
-        headers = {}
-        headers['Authorization'] = "Bearer " + access_token
-        r = requests.get(self.metadata_url +
-                         '/nodes?filters=isRoot:true',
-                         headers=headers)
-        if r.status_code is not requests.codes.ok:
-            print(r.status_code)
-            print(r.text)
-            raise RuntimeError("Error getting endpoints")
-        data = json.loads(r.text)
+    def load_root_folder(self):
+        url = self.metadata_url + '/nodes?filters=isRoot:true'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=(requests.codes.ok,),
+                                     use_access_token=True,
+                                     action_string="Cloud Drive Root Folder")
+
+        data = json.loads(response.text)
         if 'data' not in data:
             raise RuntimeError("Error getting root folder")
         self.root_folder = data['data'][0]['id']
 
     def upload(self, file_path, destination=None,
                modified_time=None, create_folder=False, overwrite=False):
-        # TODO: Stream request for large files
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-
-        print("Upload {} Cloud Drive Storage Service".format(file_path))
+        logger = logging.getLogger("multidrive")
+        logger.debug("Upload {} Cloud Drive Storage Service".format(file_path))
 
         destination_id = self.root_folder
         if destination is not None:
@@ -200,8 +315,6 @@ class CloudDriveStorageService(StorageService):
 
         if cur_file is None:
             url = self.content_url + "/nodes?suppress=deduplication"
-            headers = {}
-            headers['Authorization'] = "Bearer " + access_token
 
             metadata = {}
             metadata['name'] = file_name
@@ -211,77 +324,51 @@ class CloudDriveStorageService(StorageService):
             mime_type = guess_type(file_path)[0]
             mime_type = mime_type if mime_type else 'application/octet-stream'
 
-            content = MultipartEncoder(
-                fields=[('metadata', ("", json.dumps(metadata))),
-                        ('content', (file_name,
-                                     open(file_path, 'rb'),
-                                     mime_type))])
+            # content = MultipartEncoder(
+            #     fields=[('metadata', ("", json.dumps(metadata))),
+            #             ('content', (file_name,
+            #                          open(file_path, 'rb'),
+            #                          mime_type))])
+            # headers = {}
+            # headers["Content-Type"] = content.content_type
 
-            headers["Content-Type"] = content.content_type
-
-            r = requests.post(url, headers=headers, data=content)
-
-            tries = 0
-            while r.status_code != requests.codes.created and tries < 10:
-                tries += 1
-                print("Upload File: Cloud Drive connection failed Error: " +
-                      r.text)
-                print("Retry " + str(tries))
-                sleep_length = float(1 << tries) / 2
-                time.sleep(sleep_length)
-                content = MultipartEncoder(
-                    fields=[('metadata', ("", json.dumps(metadata))),
-                            ('content', (file_name,
-                                         open(file_path, 'rb'),
-                                         mime_type))])
-
-                r = requests.post(url, headers=headers, data=content)
-
-            if r.status_code is not requests.codes.created:
-                print("Status: " + str(r.status_code))
-                print("Error: " + str(r.text))
-
-                raise RuntimeError("Error uploading file")
+            # r = requests.post(url, headers=headers, data=content)
+            fields = [('metadata', ("", json.dumps(metadata)))]
+            content = (file_name, file_path, mime_type)
+            self.http_request(url=url,
+                              request_type=RequestType.POST,
+                              status_codes=(requests.codes.
+                                            created,),
+                              use_access_token=True,
+                              action_string="Upload File",
+                              max_tries=10,
+                              use_multipart_encoder=True,
+                              multipart_encoder_fields=fields,
+                              multipart_encoder_content=content)
         else:
             if overwrite is False:
                 raise RuntimeError("File: {} exists, but overwrite is not set"
                                    .format(file_name))
             url = self.content_url + "/nodes/"+cur_file['id']+"/content"
-            headers = {}
-            headers['Authorization'] = "Bearer " + access_token
 
             mime_type = guess_type(file_path)[0]
             mime_type = mime_type if mime_type else 'application/octet-stream'
 
-            content = MultipartEncoder(
-                fields=[('content',
-                        (file_name, open(file_path, 'rb'), mime_type))])
+            content = (file_name, file_path, mime_type)
 
-            headers["Content-Type"] = content.content_type
+            self.http_request(url=url,
+                              request_type=RequestType.PUT,
+                              status_codes=(requests.codes.ok,),
+                              use_access_token=True,
+                              action_string="Upload File (Overwrite)",
+                              max_tries=10,
+                              use_multipart_encoder=True,
+                              multipart_encoder_fields=[],
+                              multipart_encoder_content=content)
 
-            r = requests.put(url, headers=headers, data=content)
-
-            tries = 0
-            while r.status_code != requests.codes.ok and tries < 10:
-                tries += 1
-                print("Status: " + str(r.status_code))
-                print("Upload File: Cloud Drive connection failed Error: " +
-                      r.text)
-                print("Retry " + str(tries))
-                sleep_length = float(1 << tries) / 2
-                time.sleep(sleep_length)
-                r = requests.put(url, headers=headers, data=content)
-
-            if r.status_code is not requests.codes.ok:
-                print("Status: " + str(r.status_code))
-                print("Error: " + str(r.text))
-                raise RuntimeError("Error uploading file")
         print("{} successfully uploaded".format(file_name))
 
     def get_folder(self, cur_folder, folder_path, create=False):
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-
         if folder_path.endswith('/'):
             folder_path = folder_path[:-1]
 
@@ -293,19 +380,22 @@ class CloudDriveStorageService(StorageService):
             cur_item = split_path.pop(0)
             data = None
             if create_rest is False:
-                headers = {}
-                headers['Authorization'] = "Bearer " + access_token
-
                 params = urllib.parse.urlencode({'filters': 'name:'
                                                 + cur_item.replace(" ", "\ ")})
-                r = requests.get(self.metadata_url + '/nodes/'
-                                 + cur_folder + '/children',
-                                 params=params,
-                                 headers=headers)
+                url = self.metadata_url + '/nodes/' + cur_folder + '/children'
+                response = self.http_request(url=url,
+                                             request_type=RequestType.GET,
+                                             status_codes=(requests.codes.ok,
+                                                           requests.codes.
+                                                           bad_request),
+                                             use_access_token=True,
+                                             params=params,
+                                             action_string='Get Folder')
+                if response.status_code == requests.codes.bad_request:
+                    raise ItemDoesNotExistError("Error: Folder {} does not "
+                                                "exist.".format(cur_item))
 
-                if r.status_code is not requests.codes.ok:
-                    raise RuntimeError("Error getting folder")
-                data = json.loads(r.text)
+                data = json.loads(response.text)
                 if 'data' not in data:
                     raise RuntimeError("Error getting folder " + cur_item)
 
@@ -317,27 +407,22 @@ class CloudDriveStorageService(StorageService):
                 create_rest = True
                 url = self.metadata_url + "/nodes"
 
-                headers = {}
-                headers['Authorization'] = "Bearer " + access_token
-
                 metadata = {}
                 metadata['name'] = cur_item
                 metadata['kind'] = "FOLDER"
                 metadata['parents'] = [cur_folder]
 
-                # data = [('metadata', ("", json.dumps(metadata)))]
                 data = json.dumps(metadata)
 
-                r = requests.post(url, headers=headers, data=data)
+                response = self.http_request(url=url,
+                                             request_type=RequestType.POST,
+                                             status_codes=(requests.codes.
+                                                           created,),
+                                             use_access_token=True,
+                                             data=data,
+                                             action_string='Create Folder')
 
-                print("create Folder: " + folder_path)
-                print("cur_item:"+cur_item)
-                print(r.status_code)
-                print(r.text)
-                if r.status_code is not requests.codes.created:
-                    print("Status: " + str(r.status_code))
-                    raise RuntimeError("Error creating folder")
-                data = json.loads(r.text)
+                data = json.loads(response.text)
                 cur_folder = data['id']
             elif len(data['data']) > 1:
                 raise RuntimeError("Error: Multiple items with name: " +
@@ -351,21 +436,18 @@ class CloudDriveStorageService(StorageService):
         return cur_folder
 
     def get_file(self, folder_id, file_name):
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-
-        headers = {}
-        headers['Authorization'] = "Bearer " + access_token
         params = urllib.parse.urlencode({'filters': 'name:' +
                                         file_name.replace(" ", "\ ")})
-        r = requests.get(self.metadata_url + '/nodes/'
-                         + folder_id + '/children',
-                         params=params,
-                         headers=headers)
 
-        if r.status_code is not requests.codes.ok:
-            raise RuntimeError("Error getting file")
-        data = json.loads(r.text)
+        url = self.metadata_url + '/nodes/' + folder_id + '/children'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=(requests.codes.ok,),
+                                     use_access_token=True,
+                                     params=params,
+                                     action_string='Get File')
+
+        data = json.loads(response.text)
         if 'data' not in data:
             raise RuntimeError("Error getting file " + file_name)
         if (len(data['data']) == 0):
@@ -384,7 +466,7 @@ class CloudDriveStorageService(StorageService):
         print("Download {} Cloud Drive Storage Service".format(file_path))
         (folder, file_name) = os.path.split(file_path)
 
-        if folder is None:
+        if folder is None or folder == "":
             folder = self.root_folder
         else:
             folder = self.get_folder(self.root_folder, folder, create=False)
@@ -393,16 +475,13 @@ class CloudDriveStorageService(StorageService):
 
         if cur_file is None:
             raise RuntimeError("File {} does not exist".format(file_path))
-        self.download_item(cur_file, destination, overwrite=overwrite,
+        return self.download_item(cur_file, destination, overwrite=overwrite,
                            create_folder=False)
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
         logger = logging.getLogger("multidrive")
         local_path = cur_file['name']
-
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
 
         if destination is not None:
             local_path = os.path.join(destination, local_path)
@@ -424,23 +503,13 @@ class CloudDriveStorageService(StorageService):
 
         url = self.content_url+"/nodes/"+cur_file['id']+"/content"
         logger.info("URL to save file is: "+url)
-        headers = {'Authorization': "Bearer " + access_token}
-        response = requests.get(url, headers=headers, stream=True)
-        tries = 0
-        while response.status_code != requests.codes.ok and tries < 6:
-            tries += 1
-            logger.warning(url)
-            logger.warning("Save File: Cloud Drive connection failed Error: "
-                           + response.text)
-            logger.warning("Headers: " +
-                           str(response.headers))
-            logger.warning("Retry " + str(tries))
-            sleep_length = float(1 << tries) / 2
-            time.sleep(sleep_length)
-            response = requests.get(url, headers=headers, stream=True)
 
-        if response.status_code != requests.codes.ok:
-            raise RuntimeError("Unable to access Cloud Drive file")
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=(requests.codes.ok,),
+                                     use_access_token=True,
+                                     stream=True,
+                                     action_string='Download Item')
 
         size = 0
         for chunk in response.iter_content(chunk_size=4*1024*1024):
@@ -492,40 +561,27 @@ class CloudDriveStorageService(StorageService):
 
     def get_folder_listing(self, cur_folder, path_list):
         logger = logging.getLogger("multidrive")
-        refresh_token = self.load_refresh_token()
-        access_token = self.get_access_token(refresh_token)
-
         result_list = []
-
-        headers = {}
-        headers['Authorization'] = "Bearer " + access_token
 
         url = self.metadata_url + '/nodes/' + cur_folder + '/children'
         params = {}
         data = []
         num_files = 0
         while True:
-            response = requests.get(url, headers=headers, params=params)
-            # print r.status_code
-            # print r.text
+            response = self.http_request(url=url,
+                                         request_type=RequestType.GET,
+                                         status_codes=(requests.codes.ok,
+                                                       requests.codes.
+                                                       not_found),
+                                         use_access_token=True,
+                                         params=params,
+                                         action_string='Get Folder Listing')
 
-            tries = 0
-            while response.status_code != requests.codes.ok and tries < 6:
-                tries += 1
-                logger.warning("Error Status code: "+str(response.status_code))
-                if response.status_code == 404:
-                    logger.warning("Item not found: " + cur_folder)
-                    raise RuntimeError("Item not found. Possible bad path: "
-                                       + cur_folder)
-                logger.warning("Cloud Drive connection failed "
-                               "Error: " + response.text)
-                logger.warning("Attempt: " + str(tries))
-                sleep_length = float(1 << tries)
-                time.sleep(sleep_length)
-                response = requests.get(url, headers=headers)
+            if response.status_code == requests.codes.not_found:
+                logger.warning("Item not found: " + cur_folder)
+                raise RuntimeError("Item not found. Possible bad path: "
+                                   + cur_folder)
 
-            if response.status_code is not requests.codes.ok:
-                raise RuntimeError("Error getting folder")
             cur_response = json.loads(response.text)
             if 'data' not in cur_response:
                 raise RuntimeError("Error getting folder " + cur_folder)
@@ -538,7 +594,6 @@ class CloudDriveStorageService(StorageService):
         data.sort(key=lambda cur_file: cur_file['name'])
 
         for current_item in data:
-            # cur_name = current_path+"/"+current_item['name']
             result_list.append((current_item, path_list))
             if current_item['kind'] == "FOLDER":
                 new_list = list(path_list)
