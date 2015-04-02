@@ -64,10 +64,10 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
-2015-04-01 0.1.6: Additional retry code added, particularly on hash and connection failures
+2015-04-02 0.1.6: Additional retry code added, particularly on hash and connection failures
 				  Bug Fixes
 
-2015-04-01 0.1.5: Attempt Retry on UnicodeDecodeError on Cloud Drive
+2015-04-02 0.1.5: Attempt Retry on UnicodeDecodeError on Cloud Drive
 				  Fixed Retry code for OneDrive/CloudDrive
 				  Bug Fixes
 
@@ -110,7 +110,6 @@ pip install google-api-python-client
 pip install requests
 pip install requests-toolbelt
 pip install python-dateutil
-pip install dropbox
 
 
 ## Google Drive setup
