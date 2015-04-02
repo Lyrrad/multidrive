@@ -134,38 +134,46 @@ class CloudDriveStorageService(StorageService):
             multipart_encoder_fields.append(cur_multipart_content)
             data = MultipartEncoder(fields=multipart_encoder_fields)
             headers["Content-Type"] = data.content_type
-        if request_type == RequestType.GET:
-            response = requests.get(url, headers=headers, params=params,
-                                    stream=stream)
-        elif request_type == RequestType.PUT:
-            response = requests.put(url, headers=headers, data=data,
-                                    params=params)
-        elif request_type == RequestType.POST:
-            response = requests.post(url, headers=headers, data=data)
 
-        if use_multipart_encoder is True:
-            print("Current hash: "+multipart_hash_file.get_md5())
-            cur_multipart_file.close()
+        try:
+            if request_type == RequestType.GET:
+                response = requests.get(url, headers=headers, params=params,
+                                        stream=stream)
+            elif request_type == RequestType.PUT:
+                response = requests.put(url, headers=headers, data=data,
+                                        params=params)
+            elif request_type == RequestType.POST:
+                response = requests.post(url, headers=headers, data=data)
+            if use_multipart_encoder is True:
+                logger.info("Current hash: "+multipart_hash_file.get_md5())
+        except UnicodeDecodeError as err:
+            logger.warning("UnicodeDecodeError: {}".format(err))
+            response = None
+        finally:
+            if use_multipart_encoder is True:
+                cur_multipart_file.close()
 
         tries = 0
-        while (response.status_code not in status_codes
-               and tries < max_tries):
+        while response is None or (response.status_code not in status_codes
+                                   and tries < max_tries):
             tries += 1
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
             logger.warning("Retry " + str(tries))
-
             sleep_length = float(1 << tries) / 2
 
-            if 'Retry-After' in response.headers:
-                logger.warning("Server requested wait of {} seconds".
-                               format(response.headers['Retry-After']))
-                sleep_length = int(response.headers['Retry-After'])
-            elif response.status_code in severe_status_codes:
-                logger.warning("Server Error, increasing wait time")
-                sleep_length *= 20
+            if response is not None:
+                logger.warning("{}: Connection failed Code: {}"
+                               .format(action_string,
+                                       str(response.status_code)))
+                logger.warning("Error: {}".format(response.text))
+                logger.warning("Headers: {}".format(str(response.headers)))
+
+                if 'Retry-After' in response.headers:
+                    logger.warning("Server requested wait of {} seconds".
+                                   format(response.headers['Retry-After']))
+                    sleep_length = int(response.headers['Retry-After'])
+                elif response.status_code in severe_status_codes:
+                    logger.warning("Server Error, increasing wait time")
+                    sleep_length *= 20
             logger.warning("Waiting {} second(s) for next attempt"
                            .format(str(sleep_length)))
 
@@ -186,17 +194,21 @@ class CloudDriveStorageService(StorageService):
                                           multipart_encoder_content[2]))
                 multipart_encoder_fields.append(cur_multipart_content)
                 data = MultipartEncoder(fields=multipart_encoder_fields)
-
-            if request_type == RequestType.GET:
-                response = requests.get(url, headers=headers, params=params,
-                                        stream=stream)
-            elif request_type == RequestType.PUT:
-                requests.put(url, headers=headers, data=data, params=params)
-            elif request_type == RequestType.POST:
-                requests.post(url, headers=headers, data=data)
-
-            if use_multipart_encoder is True:
-                cur_multipart_file.close()
+            try:
+                if request_type == RequestType.GET:
+                    response = requests.get(url, headers=headers,
+                                            params=params, stream=stream)
+                elif request_type == RequestType.PUT:
+                    response = requests.put(url, headers=headers, data=data,
+                                            params=params)
+                elif request_type == RequestType.POST:
+                    response = requests.post(url, headers=headers, data=data)
+            except UnicodeDecodeError as err:
+                logger.warning("UnicodeDecodeError: {}".format(err))
+                response = None
+            finally:
+                if use_multipart_encoder is True:
+                    cur_multipart_file.close()
 
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"
@@ -390,7 +402,7 @@ class CloudDriveStorageService(StorageService):
 
         server_hash = json.loads(response.text)['contentProperties']['md5']
         if (cur_hash_file.get_md5() != server_hash.lower()):
-            raise RuntimeError("Hash of downloaded file does "
+            raise RuntimeError("Hash of uploaded file does "
                                "not match server.")
 
         print("{} successfully uploaded".format(file_name))

@@ -150,9 +150,10 @@ class OneDriveStorageService(StorageService):
                 response = requests.get(url, headers=headers, params=params,
                                         stream=stream)
             elif request_type == RequestType.PUT:
-                requests.put(url, headers=headers, data=data, params=params)
+                response = requests.put(url, headers=headers, data=data,
+                                        params=params)
             elif request_type == RequestType.POST:
-                requests.post(url, headers=headers, data=data)
+                response = requests.post(url, headers=headers, data=data)
 
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"

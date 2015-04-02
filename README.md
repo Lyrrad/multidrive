@@ -64,6 +64,10 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-01 0.1.5: Bug Fixes
+				     Attempt Retry on UnicodeDecodeError on Cloud Drive
+				     Fixed Retry code for OneDrive/CloudDrive
+
 2015-04-01 0.1.4: Bug Fixes
 				  Added Hash check upon upload and download to confirm files properly transferred.
 
@@ -102,6 +106,7 @@ pip install google-api-python-client
 pip install requests
 pip install requests-toolbelt
 pip install python-dateutil
+pip install dropbox
 
 
 ## Google Drive setup
