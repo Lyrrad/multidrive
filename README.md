@@ -85,7 +85,7 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Known issues
 
-On a 32-bit system, can't upload files bigger than 4GB to Amazon Cloud Drive. It is an issue with requests-toolbelt and has been reported.
+On a 32-bit system, can't upload files bigger than 4GB to Amazon Cloud Drive. It is an issue with requests-toolbelt and has been reported.  It has been fixed with this pull request: https://github.com/sigmavirus24/requests-toolbelt/pull/81
 
 ## Requirements
 
