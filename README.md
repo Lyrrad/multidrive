@@ -13,25 +13,29 @@ No API keys are provided.  You will need to sign up as a developer with each ser
 
 ## Usage
 
+    ./multidrive -h
+
+Displays help
+
     ./multidrive -s googledrive -a upload -l example.txt
 
-Uploads "test.txt" to the root directory on Google Drive.
+Uploads "example.txt" to the root directory on Google Drive.
 
     ./multidrive -s googledrive -a upload -l example.txt -r examplefolder
 
-Uploads "test.txt" to the "examplefolder" directory on Google Drive.
+Uploads "example.txt" to the "examplefolder" directory on Google Drive.
 
     ./multidrive -s googledrive -a upload -l example.txt -r examplefolder -c
 
-Uploads "test.txt" to the "examplefolder" directory on Google Drive.  It will create the remote folder if necessary
+Uploads "example.txt" to the "examplefolder" directory on Google Drive.  It will create the remote folder if necessary
 
     ./multidrive -s googledrive -a download -r "example.txt" 
 
-Downloads "test.txt" in the root directory of Google Drive to the local computer. 
+Downloads "example.txt" in the root directory of Google Drive to the local computer. 
 
     ./multidrive -s googledrive -d onedrive -a copy -r "Source Folder" -e "Transfers" -c
 
-Copies the contents of "Source folder" on Google Drive to the "Transfers" folder on Microsoft OneDrive, creating the remote folder if necessary.  The program will get a list of files, then, transfer one file at a time to the other service by downloading it to the local machine, then uploading it again.
+Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder on Microsoft OneDrive, creating the remote folder if necessary.  The program will get a list of files, then, transfer one file at a time to the other service by downloading it to the local machine, then uploading it again.
 
 
 ## Current Functionality
@@ -59,7 +63,7 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 |Create Remote Folder	|Yes|Yes|Yes|Pending|
 |List Quota	|Pending|Pending|Pending|Pending|
 |Delete Remote File	|Pending|Pending|Pending|Pending|
-|Move Folders	|Yes|Yes|Yes|Pending|
+|Copy Folders	|Yes|Yes|Yes|Pending|
 |Verify Files by Hash|Yes|Yes|Yes|Pending|
 
 ## Updates
