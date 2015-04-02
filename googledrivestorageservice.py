@@ -38,6 +38,10 @@ import time
 from storageservice import StorageService
 
 
+class HashMismatch(RuntimeError):
+    pass
+
+
 class HashFile(object):
     def set_file(self, cur_file):
         self.file = cur_file
@@ -190,7 +194,7 @@ class GoogleDriveStorageService(StorageService):
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
-
+        logger = logging.getLogger("multidrive")
         local_path = cur_file['title']
         if destination is not None:
             local_path = os.path.join(destination, local_path)
@@ -209,12 +213,24 @@ class GoogleDriveStorageService(StorageService):
                 "Local file {} exists.  Enable overwrite option to continue."
                 .format(local_path))
 
-        fd = open(local_path, 'wb')
-        try:
-            self.download_helper(cur_file['id'], fd, cur_file['title'],
-                                 cur_file['md5Checksum'])
-        finally:
-            fd.close()
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
+            fd = open(local_path, 'wb')
+            try:
+                self.download_helper(cur_file['id'], fd, cur_file['title'],
+                                     cur_file['md5Checksum'])
+            except HashMismatch:
+                logger.warning("Hash of downloaded file does "
+                               "not match server.  Attempting again")
+                cur_attempt += 1
+                continue
+            finally:
+                fd.close()
+            break
+        if cur_attempt > NUM_ATTEMPTS:
+            raise RuntimeError("Hash of downloaded file does "
+                               "not match server.")
 
         modified_date = dateutil.parser.parse(cur_file['modifiedDate'])
         os.utime(local_path, (time.mktime(modified_date.timetuple()),
@@ -299,85 +315,93 @@ class GoogleDriveStorageService(StorageService):
     def upload_file(self, file_path, folder=None, modified_time=None,
                     create_folder=False, overwrite=False):
         logger = logging.getLogger("multidrive")
-        with open(file_path, 'rb') as cur_open_file:
 
-            logger.debug("Uploading " + file_path)
+        logger.debug("Uploading " + file_path)
+        file_name = os.path.basename(file_path)
+        mime_type = guess_type(file_path)[0]
+        mime_type = mime_type if mime_type else 'application/octet-stream'
 
-            file_name = os.path.basename(file_path)
-            mime_type = guess_type(file_path)[0]
-            mime_type = mime_type if mime_type else 'application/octet-stream'
+        file_size = os.path.getsize(file_path)
 
-            file_size = os.path.getsize(file_path)
+        parents = []
+        cur_folder = 'root'
+        if folder is not None:
+            cur_folder = self.get_folder(folder, create=create_folder)
+            parents.append({"id": cur_folder})
 
-            cur_hash_file = HashFile()
-            cur_hash_file.set_file(cur_open_file)
-
-            # media_body = MediaFileUpload(file_path, mimetype=mime_type,
-            #                              chunksize=1024*1024, resumable=True)
-            media_body = MediaIoBaseUpload(cur_hash_file, mimetype=mime_type,
-                                           chunksize=1024*1024, resumable=True)
-            if file_size == 0:
-                media_body = None
-            parents = []
-            cur_folder = 'root'
-            if folder is not None:
-                cur_folder = self.get_folder(folder, create=create_folder)
-                parents.append({"id": cur_folder})
-
-            if modified_time is None:
-                modified_time = datetime.datetime.fromtimestamp(
-                    os.path.getmtime(file_path),
-                    UTC()).isoformat()[:-6]
-                if '.' not in modified_time:
-                    modified_time += ".000000Z"
-                else:
-                    modified_time += "Z"
-
-            # OneDrive returns times that happen to lie on the second without
-            # the microseconds at the end.
+        if modified_time is None:
+            modified_time = datetime.datetime.fromtimestamp(
+                os.path.getmtime(file_path),
+                UTC()).isoformat()[:-6]
             if '.' not in modified_time:
-                    modified_time = modified_time.replace("Z", ".000000Z")
-            logging.debug("Modified time: "+modified_time)
+                modified_time += ".000000Z"
+            else:
+                modified_time += "Z"
 
-            existing_file = self.get_file_if_exists(file_name, cur_folder)
+        # OneDrive returns times that happen to lie on the second without
+        # the microseconds at the end.
+        if '.' not in modified_time:
+                modified_time = modified_time.replace("Z", ".000000Z")
+        logging.debug("Modified time: "+modified_time)
 
-            try:
-                # cur_file = None
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
+            with open(file_path, 'rb') as cur_open_file:
 
-                if existing_file is not None:
-                    if overwrite is False:
-                        raise RuntimeError("File already exists")
-                    old_file = self.__service__.files().get(
-                        fileId=existing_file['id']).execute()
-                    old_file['modifiedDate'] = modified_time
-                    old_file['title'] = file_name
-                    old_file['mimeType'] = mime_type
-                    old_file['parents'] = parents
-                    new_file = self.__service__.files().update(
-                        fileId=existing_file['id'],
-                        body=old_file,
-                        media_body=media_body).execute()
+                cur_hash_file = HashFile()
+                cur_hash_file.set_file(cur_open_file)
 
-                else:
-                    body = {
-                        'title': file_name,
-                        'mimeType': mime_type,
-                        'parents': parents,
-                        'modifiedDate': modified_time,
-                    }
-                    new_file = self.__service__.files().insert(
-                        body=body,
-                        media_body=media_body).execute()
+                media_body = MediaIoBaseUpload(cur_hash_file,
+                                               mimetype=mime_type,
+                                               chunksize=1024*1024,
+                                               resumable=True)
+                if file_size == 0:
+                    media_body = None
 
-            except apiclient.errors.HttpError as error:
-                print('An error occured uploading file: %s' % error)
-                return None
-            logger.info('Calculated MD5 of uploaded file:' +
-                        cur_hash_file.get_md5())
-            logger.info('Google Drive Checksum: ' + new_file['md5Checksum'])
-            if (cur_hash_file.get_md5() != new_file['md5Checksum']):
-                raise RuntimeError("Hash of uploaded file does "
-                                   "not match server.")
+                existing_file = self.get_file_if_exists(file_name, cur_folder)
+
+                try:
+                    if existing_file is not None:
+                        if overwrite is False:
+                            raise RuntimeError("File already exists")
+                        old_file = self.__service__.files().get(
+                            fileId=existing_file['id']).execute()
+                        old_file['modifiedDate'] = modified_time
+                        old_file['title'] = file_name
+                        old_file['mimeType'] = mime_type
+                        old_file['parents'] = parents
+                        new_file = self.__service__.files().update(
+                            fileId=existing_file['id'],
+                            body=old_file,
+                            media_body=media_body).execute()
+                    else:
+                        body = {
+                            'title': file_name,
+                            'mimeType': mime_type,
+                            'parents': parents,
+                            'modifiedDate': modified_time,
+                        }
+                        new_file = self.__service__.files().insert(
+                            body=body,
+                            media_body=media_body).execute()
+
+                except apiclient.errors.HttpError as error:
+                    print('An error occured uploading file: %s' % error)
+                    return None
+                logger.info('Calculated MD5 of uploaded file:' +
+                            cur_hash_file.get_md5())
+                logger.info('Google Drive Checksum: ' +
+                            new_file['md5Checksum'])
+                if (cur_hash_file.get_md5() == new_file['md5Checksum']):
+                    break
+                logger.warning("Hash of downloaded file does "
+                               "not match server.  Attempting again")
+                cur_attempt += 1
+
+        if (cur_hash_file.get_md5() != new_file['md5Checksum']):
+            raise HashMismatch("Hash of uploaded file does "
+                               "not match server.")
 
     def get_file_if_exists(self, file_name, folder_id):
         query = ("'{}' in parents and trashed=false and "

@@ -149,6 +149,9 @@ class CloudDriveStorageService(StorageService):
         except UnicodeDecodeError as err:
             logger.warning("UnicodeDecodeError: {}".format(err))
             response = None
+        except requests.exceptions.ConnectionError as err:
+            logger.warning("ConnectionError: {}".format(err))
+            response = None
         finally:
             if use_multipart_encoder is True:
                 cur_multipart_file.close()
@@ -174,6 +177,7 @@ class CloudDriveStorageService(StorageService):
                 elif response.status_code in severe_status_codes:
                     logger.warning("Server Error, increasing wait time")
                     sleep_length *= 20
+
             logger.warning("Waiting {} second(s) for next attempt"
                            .format(str(sleep_length)))
 
@@ -194,6 +198,7 @@ class CloudDriveStorageService(StorageService):
                                           multipart_encoder_content[2]))
                 multipart_encoder_fields.append(cur_multipart_content)
                 data = MultipartEncoder(fields=multipart_encoder_fields)
+
             try:
                 if request_type == RequestType.GET:
                     response = requests.get(url, headers=headers,
@@ -206,10 +211,16 @@ class CloudDriveStorageService(StorageService):
             except UnicodeDecodeError as err:
                 logger.warning("UnicodeDecodeError: {}".format(err))
                 response = None
+            except requests.exceptions.ConnectionError as err:
+                logger.warning("ConnectionError: {}".format(err))
+                response = None
             finally:
                 if use_multipart_encoder is True:
                     cur_multipart_file.close()
 
+        if response is None:
+            raise RemoteConnectionError("{}: Unable to complete request."
+                                        .format(action_string))
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"
                            .format(action_string, str(response.status_code)))
@@ -353,54 +364,69 @@ class CloudDriveStorageService(StorageService):
         cur_file = self.get_file(destination_id, file_name)
         cur_hash_file = HashFile()
 
-        if cur_file is None:
-            url = self.content_url + "/nodes?suppress=deduplication"
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
 
-            metadata = {}
-            metadata['name'] = file_name
-            metadata['kind'] = "FILE"
-            metadata['parents'] = [destination_id]
+            if cur_file is None:
+                url = self.content_url + "/nodes?suppress=deduplication"
 
-            mime_type = guess_type(file_path)[0]
-            mime_type = mime_type if mime_type else 'application/octet-stream'
+                metadata = {}
+                metadata['name'] = file_name
+                metadata['kind'] = "FILE"
+                metadata['parents'] = [destination_id]
 
-            fields = [('metadata', ("", json.dumps(metadata)))]
-            content = (file_name, file_path, mime_type)
+                mime_type = guess_type(file_path)[0]
+                if not mime_type:
+                    mime_type = 'application/octet-stream'
 
-            response = self.http_request(url=url,
-                                         request_type=RequestType.POST,
-                                         status_codes=(requests.codes.
-                                                       created,),
-                                         use_access_token=True,
-                                         action_string="Upload File",
-                                         max_tries=10,
-                                         use_multipart_encoder=True,
-                                         multipart_encoder_fields=fields,
-                                         multipart_encoder_content=content,
-                                         multipart_hash_file=cur_hash_file)
-        else:
-            if overwrite is False:
-                raise RuntimeError("File: {} exists, but overwrite is not set"
-                                   .format(file_name))
-            url = self.content_url + "/nodes/"+cur_file['id']+"/content"
+                fields = [('metadata', ("", json.dumps(metadata)))]
+                content = (file_name, file_path, mime_type)
 
-            mime_type = guess_type(file_path)[0]
-            mime_type = mime_type if mime_type else 'application/octet-stream'
+                response = self.http_request(url=url,
+                                             request_type=RequestType.POST,
+                                             status_codes=(requests.codes.
+                                                           created,),
+                                             use_access_token=True,
+                                             action_string="Upload File",
+                                             max_tries=10,
+                                             use_multipart_encoder=True,
+                                             multipart_encoder_fields=fields,
+                                             multipart_encoder_content=content,
+                                             multipart_hash_file=cur_hash_file)
+            else:
+                if overwrite is False:
+                    raise RuntimeError("File: {} exists, but "
+                                       "overwrite is not set"
+                                       .format(file_name))
+                url = self.content_url + "/nodes/"+cur_file['id']+"/content"
 
-            content = (file_name, file_path, mime_type)
-            cur_hash_file = HashFile()
-            response = self.http_request(url=url,
-                                         request_type=RequestType.PUT,
-                                         status_codes=(requests.codes.ok,),
-                                         use_access_token=True,
-                                         action_string="Upload File Overwrite",
-                                         max_tries=10,
-                                         use_multipart_encoder=True,
-                                         multipart_encoder_fields=[],
-                                         multipart_encoder_content=content,
-                                         multipart_hash_file=cur_hash_file)
+                mime_type = guess_type(file_path)[0]
+                if not mime_type:
+                    mime_type = 'application/octet-stream'
 
-        server_hash = json.loads(response.text)['contentProperties']['md5']
+                content = (file_name, file_path, mime_type)
+                cur_hash_file = HashFile()
+                response = self.http_request(url=url,
+                                             request_type=RequestType.PUT,
+                                             status_codes=(requests.codes.ok,),
+                                             use_access_token=True,
+                                             action_string="Upload File "
+                                                           "Overwrite",
+                                             max_tries=10,
+                                             use_multipart_encoder=True,
+                                             multipart_encoder_fields=[],
+                                             multipart_encoder_content=content,
+                                             multipart_hash_file=cur_hash_file)
+
+            server_hash = json.loads(response.text)['contentProperties']['md5']
+
+            cur_attempt += 1
+            if (cur_hash_file.get_md5() == server_hash.lower()):
+                break
+            logger.warning("Hash of uploaded file does "
+                           "not match server.  Attempting again")
+
         if (cur_hash_file.get_md5() != server_hash.lower()):
             raise RuntimeError("Hash of uploaded file does "
                                "not match server.")
@@ -538,30 +564,44 @@ class CloudDriveStorageService(StorageService):
             raise RuntimeError("Local file {} exists.  Enable overwrite "
                                "option to continue.".format(local_path))
 
-        f = open(local_path, "wb")
+        remote_hash = cur_file['contentProperties']['md5'].lower()
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
+            f = open(local_path, "wb")
 
-        url = self.content_url+"/nodes/"+cur_file['id']+"/content"
-        logger.info("URL to save file is: "+url)
+            url = self.content_url+"/nodes/"+cur_file['id']+"/content"
+            logger.info("URL to save file is: "+url)
 
-        response = self.http_request(url=url,
-                                     request_type=RequestType.GET,
-                                     status_codes=(requests.codes.ok,),
-                                     use_access_token=True,
-                                     stream=True,
-                                     action_string='Download Item')
+            response = self.http_request(url=url,
+                                         request_type=RequestType.GET,
+                                         status_codes=(requests.codes.ok,),
+                                         use_access_token=True,
+                                         stream=True,
+                                         action_string='Download Item')
 
-        size = 0
-        cur_file_hash = hashlib.md5()
-        for chunk in response.iter_content(chunk_size=4*1024*1024):
-            if chunk:  # filter out keep-alive new chunks
-                cur_file_hash.update(chunk)
-                f.write(chunk)
-                f.flush()
-                size += 1
-                if size % 100 == 0:
-                    logger.info(str(size*4) + "MB written")
-        os.fsync(f.fileno())
-        f.close()
+            size = 0
+            cur_file_hash = hashlib.md5()
+            for chunk in response.iter_content(chunk_size=4*1024*1024):
+                if chunk:  # filter out keep-alive new chunks
+                    cur_file_hash.update(chunk)
+                    f.write(chunk)
+                    f.flush()
+                    size += 1
+                    if size % 100 == 0:
+                        logger.info(str(size*4) + "MB written")
+            os.fsync(f.fileno())
+            f.close()
+
+            cur_attempt += 1
+            if (remote_hash == (cur_file_hash.hexdigest())):
+                break
+            logger.warning("Hash of downloaded file does "
+                           "not match server.  Attempting again")
+
+        if (remote_hash != (cur_file_hash.hexdigest())):
+            raise RuntimeError("Hash of downloaded file does "
+                               "not match server.")
 
         lastModifiedDateTimeString = cur_file['modifiedDate']
         modifiedDate = parse(lastModifiedDateTimeString)
@@ -570,10 +610,6 @@ class CloudDriveStorageService(StorageService):
                               time.mktime(modifiedDate.timetuple())))
 
         print(local_path + " has been saved to disk")
-        if (cur_file['contentProperties']['md5'].lower() != (cur_file_hash.
-                                                             hexdigest())):
-            raise RuntimeError("Hash of downloaded file does "
-                               "not match server.")
 
         # TODO: deal with return values.
         return (local_path, lastModifiedDateTimeString)

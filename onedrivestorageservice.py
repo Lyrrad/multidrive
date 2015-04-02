@@ -107,34 +107,40 @@ class OneDriveStorageService(StorageService):
         if use_access_token is True:
             headers['Authorization'] = "Bearer " + self.get_access_token()
 
-        if request_type == RequestType.GET:
-            response = requests.get(url, headers=headers, params=params,
-                                    stream=stream)
-        elif request_type == RequestType.PUT:
-            response = requests.put(url, headers=headers, data=data,
-                                    params=params)
-        elif request_type == RequestType.POST:
-            response = requests.post(url, headers=headers, data=data)
+        try:
+            if request_type == RequestType.GET:
+                response = requests.get(url, headers=headers, params=params,
+                                        stream=stream)
+            elif request_type == RequestType.PUT:
+                response = requests.put(url, headers=headers, data=data,
+                                        params=params)
+            elif request_type == RequestType.POST:
+                response = requests.post(url, headers=headers, data=data)
+        except requests.exceptions.ConnectionError as err:
+                logger.warning("ConnectionError: {}".format(err))
+                response = None
 
         tries = 0
-        while (response.status_code not in status_codes
-               and tries < max_tries):
+        while response is None or (response.status_code not in status_codes
+                                   and tries < max_tries):
             tries += 1
-            logger.warning("{}: Connection failed Code: {}"
-                           .format(action_string, str(response.status_code)))
-            logger.warning("Error: {}".format(response.text))
-            logger.warning("Headers: {}".format(str(response.headers)))
             logger.warning("Retry " + str(tries))
-
             sleep_length = float(1 << tries) / 2
+            if response is not None:
+                logger.warning("{}: Connection failed Code: {}"
+                               .format(action_string,
+                                       str(response.status_code)))
+                logger.warning("Error: {}".format(response.text))
+                logger.warning("Headers: {}".format(str(response.headers)))
 
-            if 'Retry-After' in response.headers:
-                logger.warning("Server requested wait of {} seconds".
-                               format(response.headers['Retry-After']))
-                sleep_length = int(response.headers['Retry-After'])
-            elif response.status_code in severe_status_codes:
-                logger.warning("Server Error, increasing wait time")
-                sleep_length *= 20
+                if 'Retry-After' in response.headers:
+                    logger.warning("Server requested wait of {} seconds".
+                                   format(response.headers['Retry-After']))
+                    sleep_length = int(response.headers['Retry-After'])
+                elif response.status_code in severe_status_codes:
+                    logger.warning("Server Error, increasing wait time")
+                    sleep_length *= 20
+
             logger.warning("Waiting {} second(s) for next attempt"
                            .format(str(sleep_length)))
 
@@ -146,14 +152,18 @@ class OneDriveStorageService(StorageService):
             if use_access_token is True:
                 headers['Authorization'] = "Bearer " + self.get_access_token()
 
-            if request_type == RequestType.GET:
-                response = requests.get(url, headers=headers, params=params,
-                                        stream=stream)
-            elif request_type == RequestType.PUT:
-                response = requests.put(url, headers=headers, data=data,
-                                        params=params)
-            elif request_type == RequestType.POST:
-                response = requests.post(url, headers=headers, data=data)
+            try:
+                if request_type == RequestType.GET:
+                    response = requests.get(url, headers=headers,
+                                            params=params, stream=stream)
+                elif request_type == RequestType.PUT:
+                    response = requests.put(url, headers=headers, data=data,
+                                            params=params)
+                elif request_type == RequestType.POST:
+                    response = requests.post(url, headers=headers, data=data)
+            except requests.exceptions.ConnectionError as err:
+                logger.warning("ConnectionError: {}".format(err))
+                response = None
 
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"
@@ -281,81 +291,96 @@ class OneDriveStorageService(StorageService):
             logger.info("Upload complete")
             return
 
-        headers = {'Content-Type': "application/json"}
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
+            headers = {'Content-Type': "application/json"}
 
-        logger.warning("Payload: " + str(payload))
+            logger.warning("Payload: " + str(payload))
 
-        url = (self.onedrive_url_root+"/drive/root:/" +
-               urllib.parse.quote(full_remote_path)+":/upload.createSession")
-        response = self.http_request(url=url,
-                                     request_type=RequestType.POST,
-                                     status_codes=(requests.codes.ok,),
-                                     headers=headers,
-                                     data=json.dumps(payload),
-                                     use_access_token=True,
-                                     action_string="Upload",)
+            url = (self.onedrive_url_root+"/drive/root:/" +
+                   urllib.parse.quote(full_remote_path) +
+                   ":/upload.createSession")
+            response = self.http_request(url=url,
+                                         request_type=RequestType.POST,
+                                         status_codes=(requests.codes.ok,),
+                                         headers=headers,
+                                         data=json.dumps(payload),
+                                         use_access_token=True,
+                                         action_string="Upload",)
 
-        data = json.loads(response.text)
+            data = json.loads(response.text)
 
-        CHUNK_SIZE = 4*1024*1024
-        chunk_start = 0
-        chunk_end = CHUNK_SIZE - 1
-        if chunk_end+1 >= file_size:
-            chunk_end = file_size - 1
-        response = None
+            url = data['uploadUrl']
 
-        url = data['uploadUrl']
+            CHUNK_SIZE = 4*1024*1024
+            chunk_start = 0
+            chunk_end = CHUNK_SIZE - 1
+            if chunk_end+1 >= file_size:
+                chunk_end = file_size - 1
+            response = None
 
-        # TODO: Deal with insufficient Storage error (507)
-        # TODO: Deal with other 400/500 series errors
-        cur_file_hash = hashlib.sha1()
-        with open(file_path, "rb") as f:
-            while chunk_start < file_size:
-                chunk_data = f.read(CHUNK_SIZE)
-                cur_file_hash.update(chunk_data)
-                headers = {}
-                headers['Content-Length'] = str(file_size)
-                headers['Content-Range'] = 'bytes {}-{}/{}'.format(chunk_start,
-                                                                   chunk_end,
-                                                                   file_size)
-                status_codes = (requests.codes.ok,
-                                requests.codes.created,
-                                requests.codes.accepted,
-                                requests.codes.conflict)
-                response = self.http_request(url=data["uploadUrl"],
-                                             request_type=RequestType.PUT,
-                                             headers=headers,
-                                             status_codes=status_codes,
-                                             data=chunk_data,
-                                             use_access_token=True,
-                                             action_string="Upload Chunk")
-                # TODO: Check for proper response based on
-                # location in file uploading.
+            # TODO: Deal with insufficient Storage error (507)
+            # TODO: Deal with other 400/500 series errors
+            cur_file_hash = hashlib.sha1()
+            with open(file_path, "rb") as f:
+                while chunk_start < file_size:
+                    chunk_data = f.read(CHUNK_SIZE)
+                    cur_file_hash.update(chunk_data)
+                    headers = {}
+                    headers['Content-Length'] = str(file_size)
+                    headers['Content-Range'] = ('bytes {}-{}/{}'.
+                                                format(chunk_start,
+                                                       chunk_end,
+                                                       file_size))
+                    status_codes = (requests.codes.ok,
+                                    requests.codes.created,
+                                    requests.codes.accepted,
+                                    requests.codes.conflict)
+                    response = self.http_request(url=data["uploadUrl"],
+                                                 request_type=RequestType.PUT,
+                                                 headers=headers,
+                                                 status_codes=status_codes,
+                                                 data=chunk_data,
+                                                 use_access_token=True,
+                                                 action_string="Upload Chunk")
+                    # TODO: Check for proper response based on
+                    # location in file uploading.
 
-                if response.status_code in (requests.codes.conflict,):
-                    raise RuntimeError("File Already Exists")
+                    if response.status_code in (requests.codes.conflict,):
+                        raise RuntimeError("File Already Exists")
 
-                logger.info("{} of {} bytes sent, {}% complete"
-                            .format(str(chunk_end+1),
-                                    str(file_size),
-                                    str(float(chunk_end+1)
-                                        / float(file_size)*100)))
-                chunk_start += CHUNK_SIZE
-                chunk_end += CHUNK_SIZE
-                if chunk_end+1 >= file_size:
-                    chunk_end = file_size - 1
+                    logger.info("{} of {} bytes sent, {}% complete"
+                                .format(str(chunk_end+1),
+                                        str(file_size),
+                                        str(float(chunk_end+1)
+                                            / float(file_size)*100)))
+                    chunk_start += CHUNK_SIZE
+                    chunk_end += CHUNK_SIZE
+                    if chunk_end+1 >= file_size:
+                        chunk_end = file_size - 1
 
-        logger.info(response.status_code)
-        logger.info(response.text)
+            logger.info(response.status_code)
+            logger.info(response.text)
 
-        server_hash = json.loads(response.text)['file']['hashes']['sha1Hash']
+            data = json.loads(response.text)
+            server_hash = data['file']['hashes']['sha1Hash']
 
-        logger.info("SHA1 local:"+cur_file_hash.hexdigest())
-        logger.info("SHA1 remote:"+server_hash)
+            logger.info("SHA1 local:"+cur_file_hash.hexdigest())
+            logger.info("SHA1 remote:"+server_hash)
+            if (cur_file_hash.hexdigest() == server_hash.lower()):
+                print("Upload of file {} complete".
+                      format(os.path.basename(file_name)))
+                return
+            cur_attempt += 1
+            logger.warning("Hash of uploaded file does "
+                           "not match server.  Attempting again")
+            # If it doesn't match, we need to replace the existing file now
+            payload["@name.conflictBehavior"] = "replace"
+
         if (cur_file_hash.hexdigest() != server_hash.lower()):
-            raise RuntimeError("Hash of uploaded file does "
-                               "not match server.")
-        print("Upload of file {} complete".format(os.path.basename(file_name)))
+                raise RuntimeError("Hash of uploaded file does "
+                                   "not match server.")
 
     def download_helper(self, url, local_path):
         logger = logging.getLogger("multidrive")
@@ -391,6 +416,7 @@ class OneDriveStorageService(StorageService):
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
+        logger = logging.getLogger("multidrive")
         local_path = cur_file['name']
         if destination is not None:
             local_path = os.path.join(destination, local_path)
@@ -408,13 +434,22 @@ class OneDriveStorageService(StorageService):
                                "option to continue.".format(local_path))
         url = self.onedrive_url_root+"/drive/items/"+cur_file['id']+"/content"
 
-        cur_file_hash = self.download_helper(url, local_path)
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while cur_attempt <= NUM_ATTEMPTS:
+            cur_file_hash = self.download_helper(url, local_path)
 
-        # API documentation states that hashes may not be available until after
-        # Item is downloaded
-        if 'sha1Hash' not in cur_file['file']['hashes']:
-            cur_file = self.get_item(item_id=cur_file['id'])
-        remote_hash = cur_file['file']['hashes']['sha1Hash']
+            # API documentation states that hashes may not be available until
+            # after Item is downloaded
+            if 'sha1Hash' not in cur_file['file']['hashes']:
+                cur_file = self.get_item(item_id=cur_file['id'])
+            remote_hash = cur_file['file']['hashes']['sha1Hash']
+
+            cur_attempt += 1
+            if (cur_file_hash == remote_hash.lower()):
+                break
+            logger.warning("Hash of downloaded file does "
+                           "not match server.  Attempting again")
 
         if (cur_file_hash != remote_hash.lower()):
             raise RuntimeError("Hash of downloaded file does "

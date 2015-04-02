@@ -64,22 +64,26 @@ Copies the contents of "Source folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
-2015-04-01 0.1.5: Bug Fixes
-				     Attempt Retry on UnicodeDecodeError on Cloud Drive
-				     Fixed Retry code for OneDrive/CloudDrive
+2015-04-01 0.1.6: Additional retry code added, particularly on hash and connection failures
+				  Bug Fixes
 
-2015-04-01 0.1.4: Bug Fixes
-				  Added Hash check upon upload and download to confirm files properly transferred.
+2015-04-01 0.1.5: Attempt Retry on UnicodeDecodeError on Cloud Drive
+				  Fixed Retry code for OneDrive/CloudDrive
+				  Bug Fixes
 
-2015-04-01 0.1.3: Bug Fixes
-				  Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.
+2015-04-01 0.1.4: Added Hash check upon upload and download to confirm files properly transferred.
+				  Bug Fixes
+				  
+
+2015-04-01 0.1.3: Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.
 				  Refactored OneDrive HTTP requests for robustness.
+				  Bug Fixes
 
-2015-03-31 0.1.2: Bug Fixes
-				  Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.
+2015-03-31 0.1.2: Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.
+				  Bug Fixes
 
-2015-03-31 0.1.1: Bug Fixes
-				  Added debug option (-b)
+2015-03-31 0.1.1: Added debug option (-b)
+				  Bug Fixes
 
 2015-03-30 0.1.0: Changed to Python 3 to try to allow 32-bit systems to upload files greater than 4GB in size to Cloud Drive.
 				  Removed PyDrive as it is not supported in Python 3.
