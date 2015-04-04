@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-04 0.1.10: Bug Fix: OneDrive: Fixed debug message for uploads
+				   Bug Fix: Google Drive: Uploads and queries for files with a ' in the name should now work.
+
 2015-04-04 0.1.9: New Feature: Quota for each account type can now be listed
 
 2015-04-04 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.

@@ -421,7 +421,7 @@ class OneDriveStorageService(StorageService):
                             f.flush()
                             size = size + 1
                             if size % 200 == 0:
-                                logger.info(str(size)*4 + "MB written")
+                                logger.info(str(size*4) + "MB written")
                     os.fsync(f.fileno())
                 except ConnectionResetError as err:
                     if cur_attempt < NUM_ATTEMPTS:
