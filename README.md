@@ -7,7 +7,7 @@ Basic utilities to upload and download from various cloud storage services.
 
 Support for Amazon Cloud Drive, Google Drive and Microsoft OneDrive upload and download operations are implemented.
 
-This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not work in that OS yet without further testing.
+This is in alpha and there may be serious bugs.  This has only been tested on Ubuntu, though it should work on Mac OS X.  This has not yet been tested in Windows, and may not work in that OS yet without further testing.  However, I have received a report that it does work in Windows.
 
 No API keys are provided.  You will need to sign up as a developer with each service providers to get keys.
 
@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-04 0.1.11: Update Readme
+				   Bug Fix: Google Drive: ' filename issue should now be fixed properly.
+
 2015-04-04 0.1.10: Bug Fix: OneDrive: Fixed debug message for uploads
 				   Bug Fix: Google Drive: Uploads and queries for files with a ' in the name should now work.
 
@@ -109,6 +112,10 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 ## Known issues
 
 On a 32-bit system, can't upload files bigger than 4GB to Amazon Cloud Drive. It is an issue with requests-toolbelt and has been reported.  It has been fixed with this pull request: https://github.com/sigmavirus24/requests-toolbelt/pull/81
+
+An error is returned if uploading a file greater than 10GB to Amazon Cloud Drive.  A report with Amazon has been filed.  The file appears to upload properly after a short delay.
+
+A possibly related issue is that downloading a file greater than 10GB is not supported from Amazon Cloud Drive.  You have to use the Desktop version of Amazon Cloud Drive (for Mac or PC), and you can only download your entire library at once.
 
 ## Requirements
 
@@ -157,12 +164,11 @@ Create a file cloud_drive_client_secrets.json with the following information (in
 
 ## Planned features
 Support for Dropbox is planned.
-Support for setting modification dates is planned for services that support it.  It currently sets the modification date for Google Drive files, though it has not been extensively tested.
-Support for handling quota errors and displaying remaining quota.
+Support for handling quota errors.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
 Deal with Google's versions feature when overwriting files.
-Support for OneDrive's experimental upload from URL feature.  This could speed up transfers to OneDrive from other services that provide a public URL for files.
+Support for OneDrive's experimental upload from URL feature.  This could speed up transfers to OneDrive from other services that provide a public URL for files (Currently just Amazon cloud drive and Dropbox.
 
 ## Licence 
 

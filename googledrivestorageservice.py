@@ -405,7 +405,7 @@ class GoogleDriveStorageService(StorageService):
                                "not match server.")
 
     def get_file_if_exists(self, file_name, folder_id):
-        escaped_file_name = file_name.replace("'", "/'")
+        escaped_file_name = file_name.replace("'", "\\'")
         query = ("'{}' in parents and trashed=false and "
                  "title='{}'".format(folder_id, escaped_file_name))
         file_list = self.__service__.files().list(q=query).execute()['items']
@@ -436,7 +436,7 @@ class GoogleDriveStorageService(StorageService):
         parent = 'root'
 
         for cur_folder in folders:
-            escaped_folder = cur_folder.replace("'", "/'")
+            escaped_folder = cur_folder.replace("'", "\\'")
             query = ("'{}' in parents and trashed=false and "
                      "mimeType='application/vnd.google-apps.folder' and "
                      "title='{}'".format(parent, escaped_folder))
@@ -459,7 +459,7 @@ class GoogleDriveStorageService(StorageService):
         if is_folder is True:
             return parent
 
-        escaped_file_name =  file_name.replace("'", "/'")
+        escaped_file_name = file_name.replace("'", "\\'")
         query = ("'{}' in parents and trashed=false and title='{}'"
                  .format(parent, escaped_file_name))
         file_list = self.__service__.files().list(q=query).execute()['items']
