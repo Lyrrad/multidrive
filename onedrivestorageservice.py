@@ -384,35 +384,46 @@ class OneDriveStorageService(StorageService):
 
     def download_helper(self, url, local_path):
         logger = logging.getLogger("multidrive")
-        f = open(local_path, "wb")
 
-        logger.info("URL to save file is: "+url)
+        NUM_ATTEMPTS = 5
+        cur_attempt = 1
+        while True:
+            cur_attempt += 1
+            with open(local_path, "wb") as f:
 
-        status_codes = (requests.codes.ok,)
-        severe_status_codes = (requests.codes.bandwidth_limit_exceeded,
-                               requests.codes.service_unavailable)
-        response = self.http_request(url=url,
-                                     request_type=RequestType.GET,
-                                     status_codes=status_codes,
-                                     stream=True,
-                                     severe_status_codes=severe_status_codes,
-                                     use_access_token=True,
-                                     action_string="Download file",
-                                     max_tries=8)
+                logger.info("URL to save file is: "+url)
 
-        size = 0
-        cur_file_hash = hashlib.sha1()
-        for chunk in response.iter_content(chunk_size=4*1024*1024):
-            if chunk:  # filter out keep-alive new chunks
-                cur_file_hash.update(chunk)
-                f.write(chunk)
-                f.flush()
-                size = size + 1
-                if size % 200 == 0:
-                    logger.info(str(size)*4 + "MB written")
-        os.fsync(f.fileno())
-        f.close()
-        return cur_file_hash.hexdigest()
+                status_codes = (requests.codes.ok,)
+                severe_status_codes = (requests.codes.bandwidth_limit_exceeded,
+                                       requests.codes.service_unavailable)
+                try:
+                    r = (self.
+                         http_request(url=url,
+                                      request_type=RequestType.GET,
+                                      status_codes=status_codes,
+                                      stream=True,
+                                      severe_status_codes=severe_status_codes,
+                                      use_access_token=True,
+                                      action_string="Download file",
+                                      max_tries=10))
+
+                    size = 0
+                    cur_file_hash = hashlib.sha1()
+                    for chunk in r.iter_content(chunk_size=4*1024*1024):
+                        if chunk:  # filter out keep-alive new chunks
+                            cur_file_hash.update(chunk)
+                            f.write(chunk)
+                            f.flush()
+                            size = size + 1
+                            if size % 200 == 0:
+                                logger.info(str(size)*4 + "MB written")
+                    os.fsync(f.fileno())
+                except ConnectionResetError as err:
+                    if cur_attempt < NUM_ATTEMPTS:
+                        logger.warning("Connection Error: %s" % err)
+                        continue
+                    raise err
+                return cur_file_hash.hexdigest()
 
     def download_item(self, cur_file, destination=None, overwrite=False,
                       create_folder=False):
@@ -437,6 +448,7 @@ class OneDriveStorageService(StorageService):
         NUM_ATTEMPTS = 5
         cur_attempt = 1
         while cur_attempt <= NUM_ATTEMPTS:
+
             cur_file_hash = self.download_helper(url, local_path)
 
             # API documentation states that hashes may not be available until

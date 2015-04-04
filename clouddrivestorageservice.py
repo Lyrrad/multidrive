@@ -146,9 +146,6 @@ class CloudDriveStorageService(StorageService):
                 response = requests.post(url, headers=headers, data=data)
             if use_multipart_encoder is True:
                 logger.info("Current hash: "+multipart_hash_file.get_md5())
-        except UnicodeDecodeError as err:
-            logger.warning("UnicodeDecodeError: {}".format(err))
-            response = None
         except requests.exceptions.ConnectionError as err:
             logger.warning("ConnectionError: {}".format(err))
             response = None
@@ -190,7 +187,7 @@ class CloudDriveStorageService(StorageService):
                 headers['Authorization'] = "Bearer " + self.get_access_token()
 
             if use_multipart_encoder is True:
-                cur_multipart_file = open(multipart_encoder_content[1])
+                cur_multipart_file = open(multipart_encoder_content[1], 'rb')
                 multipart_hash_file.set_file(cur_multipart_file)
                 cur_multipart_content = ('content',
                                          (multipart_encoder_content[0],
@@ -208,9 +205,6 @@ class CloudDriveStorageService(StorageService):
                                             params=params)
                 elif request_type == RequestType.POST:
                     response = requests.post(url, headers=headers, data=data)
-            except UnicodeDecodeError as err:
-                logger.warning("UnicodeDecodeError: {}".format(err))
-                response = None
             except requests.exceptions.ConnectionError as err:
                 logger.warning("ConnectionError: {}".format(err))
                 response = None
