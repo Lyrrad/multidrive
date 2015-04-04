@@ -684,3 +684,42 @@ class CloudDriveStorageService(StorageService):
 
     def is_folder_from_file_type(self, file):
         return file['kind'] == "FOLDER"
+
+    # Formatting code from http://stackoverflow.com/questions/1094841/
+    def format_bytes(self, num, suffix='B'):
+        for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+            if abs(num) < 1024.0:
+                return "%3.2f%s%s" % (num, unit, suffix)
+            num /= 1024.0
+        return "%.2f%s%s" % (num, 'Yi', suffix)
+
+    def get_quota(self):
+
+        url = self.metadata_url + '/account/quota'
+        status_codes = (requests.codes.ok,)
+
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get Cloud Drive Quota",
+                                     max_tries=8)
+        data = json.loads(response.text)
+
+        if ('plans' in data and 'CDSPUS0000' in data['plans']):
+            result = "Total Quota: Unlimited"
+        else:
+            total_quota = data['quota']
+            remaining_quota = data['available']
+            used_quota = total_quota-remaining_quota
+            percentage = float(used_quota)/total_quota*100
+            result = (("Total quota: {}\n"
+                       "Used quota: {}\n"
+                       "Remaining Quota: {}\n"
+                       "Percentage Used {}%")
+                      .format(self.format_bytes(total_quota),
+                              self.format_bytes(used_quota),
+                              self.format_bytes(remaining_quota),
+                              float("{0:.2f}".
+                              format(percentage))))
+        return result

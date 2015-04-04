@@ -47,7 +47,7 @@ def main():
                         'values are clouddrive, onedrive and googledrive')
     parser.add_argument('-a', '--action', nargs=1, required=True,
                         help='action to perform, valid actions include '
-                        'download, upload, list, and copy')
+                        'download, upload, list, copy, and quota')
     parser.add_argument('-d', '--destination', nargs=1,
                         help='set secondary service for this command, Valid '
                         'values are clouddrive, onedrive and googledrive.  '
@@ -189,6 +189,8 @@ def main():
                 os.remove(local_temp)
         finally:
             shutil.rmtree(tmp_path)
+    elif args.action[0].lower() == "quota":
+        print(service.get_quota())
     else:
         raise ValueError("Please specify a valid action.")
 

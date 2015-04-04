@@ -500,3 +500,49 @@ class GoogleDriveStorageService(StorageService):
 
     def is_folder_from_file_type(self, file):
         return file['mimeType'] == 'application/vnd.google-apps.folder'
+
+    # Formatting code from http://stackoverflow.com/questions/1094841/
+    def format_bytes(self, num, suffix='B'):
+        for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+            if abs(num) < 1024.0:
+                return "%3.2f%s%s" % (num, unit, suffix)
+            num /= 1024.0
+        return "%.2f%s%s" % (num, 'Yi', suffix)
+
+    def get_quota(self):
+        about = self.__service__.about().get().execute()
+
+        quota_type = about['quotaType']
+        if quota_type == 'UNLIMITED':
+
+            result = "Total quota: Unlimited\n"
+            result += "Used quota: {}\n"
+            result += "Data in Trash: {}"
+            print((about['quotaBytesUsedAggregate']))
+            used_quota = int(about['quotaBytesUsedAggregate'])
+            trashed_quota = int(about['quotaBytesUsedInTrash'])
+            result = (result.
+                      format(self.format_bytes(used_quota),
+                             self.format_bytes(trashed_quota)))
+        else:
+            total_quota = int(about['quotaBytesTotal'])
+            used_quota = int(about['quotaBytesUsedAggregate'])
+            remaining_quota = total_quota-used_quota
+            trashed_quota = int(about['quotaBytesUsedInTrash'])
+            percentage = float(used_quota)/total_quota*100
+            result = (("Total quota: {}\n"
+                       "Used quota: {}\n"
+                       "Remaining Quota: {}\n"
+                       "Data in Trash: {}\n"
+                       "Percentage Used {}%")
+                      .format(self.format_bytes(total_quota),
+                              self.format_bytes(used_quota),
+                              self.format_bytes(remaining_quota),
+                              self.format_bytes(trashed_quota),
+                              float("{0:.2f}".format(percentage))))
+        return result
+
+
+
+
+

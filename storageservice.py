@@ -58,3 +58,7 @@ class StorageService(object):
     @abstractmethod
     def is_folder_from_file_type(self, file):
         pass
+
+    @abstractmethod
+    def get_quota(self):
+        pass

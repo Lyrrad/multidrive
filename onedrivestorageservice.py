@@ -637,3 +637,43 @@ class OneDriveStorageService(StorageService):
 
     def is_folder_from_file_type(self, file):
         return "folder" in file
+
+    # Formatting code from http://stackoverflow.com/questions/1094841/
+    def format_bytes(self, num, suffix='B'):
+        for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+            if abs(num) < 1024.0:
+                return "%3.2f%s%s" % (num, unit, suffix)
+            num /= 1024.0
+        return "%.2f%s%s" % (num, 'Yi', suffix)
+
+    def get_quota(self):
+
+        url = self.onedrive_url_root+"/drive"
+
+        status_codes = (requests.codes.ok,)
+
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get OneDrive Metadata",
+                                     max_tries=8)
+        data = json.loads(response.text)
+
+        total_quota = data['quota']['total']
+        used_quota = data['quota']['used']
+        remaining_quota = data['quota']['remaining']
+        trashed_quota = data['quota']['deleted']
+        percentage = float(used_quota)/total_quota*100
+        result = (("Total quota: {}\n"
+                   "Used quota: {}\n"
+                   "Remaining Quota: {}\n"
+                   "Data in Recycle bin: {}\n"
+                   "Percentage Used {}%")
+                  .format(self.format_bytes(total_quota),
+                          self.format_bytes(used_quota),
+                          self.format_bytes(remaining_quota),
+                          self.format_bytes(trashed_quota),
+                          float("{0:.2f}".
+                          format(percentage))))
+        return result

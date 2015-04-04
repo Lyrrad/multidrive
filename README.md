@@ -61,17 +61,19 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 |Remote Destination Folder	|Yes|Yes|Yes|Pending|
 |List Remote Files	|Yes|Yes|Yes|Pending|
 |Create Remote Folder	|Yes|Yes|Yes|Pending|
-|List Quota	|Pending|Pending|Pending|Pending|
+|List Quota	|Yes|Yes|Yes|Pending|
 |Delete Remote File	|Pending|Pending|Pending|Pending|
 |Copy Folders	|Yes|Yes|Yes|Pending|
 |Verify Files by Hash|Yes|Yes|Yes|Pending|
 
 ## Updates
 
-2015-04-02 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.
+2015-04-04 0.1.9: New Feature: Quota for each account type can now be listed
+
+2015-04-04 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.
 				  Minor changes to debug code.
 
-2015-04-02 0.1.7: Bug Fix: Cloud Drive HTTP retry code fixed
+2015-04-03 0.1.7: Bug Fix: Cloud Drive HTTP retry code fixed
 				  Additional OneDrive retry code added.
 
 2015-04-02 0.1.6: Additional retry code added, particularly on hash and connection failures
