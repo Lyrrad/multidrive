@@ -322,6 +322,8 @@ class OneDriveStorageService(StorageService):
 
             # TODO: Deal with insufficient Storage error (507)
             # TODO: Deal with other 400/500 series errors
+
+            num_chunks = 0
             cur_file_hash = hashlib.sha1()
             with open(file_path, "rb") as f:
                 while chunk_start < file_size:
@@ -350,11 +352,14 @@ class OneDriveStorageService(StorageService):
                     if response.status_code in (requests.codes.conflict,):
                         raise RuntimeError("File Already Exists")
 
-                    logger.info("{} of {} bytes sent, {}% complete"
-                                .format(str(chunk_end+1),
-                                        str(file_size),
-                                        str(float(chunk_end+1)
-                                            / float(file_size)*100)))
+                    num_chunks += 1
+
+                    if num_chunks % 25 == 0:
+                        logger.info("{} of {} bytes sent, {}% complete"
+                                    .format(str(chunk_end+1),
+                                            str(file_size),
+                                            str(float(chunk_end+1)
+                                                / float(file_size)*100)))
                     chunk_start += CHUNK_SIZE
                     chunk_end += CHUNK_SIZE
                     if chunk_end+1 >= file_size:

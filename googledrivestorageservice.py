@@ -173,7 +173,8 @@ class GoogleDriveStorageService(StorageService):
                 files = self.__service__.files().list(q=query).execute()
 
             file_list.extend(files['items'])
-            if not files.get('nextPageToken'):
+            page_token = files.get('nextPageToken')
+            if not page_token:
                 break
 
         file_list.sort(key=lambda cur_file: cur_file['title'])

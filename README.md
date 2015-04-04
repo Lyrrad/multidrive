@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-02 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.
+				  Minor changes to debug code.
+
 2015-04-02 0.1.7: Bug Fix: Cloud Drive HTTP retry code fixed
 				  Additional OneDrive retry code added.
 
