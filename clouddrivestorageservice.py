@@ -704,22 +704,45 @@ class CloudDriveStorageService(StorageService):
                                      use_access_token=True,
                                      action_string="Get Cloud Drive Quota",
                                      max_tries=8)
-        data = json.loads(response.text)
+        quota_data = json.loads(response.text)
 
-        if ('plans' in data and 'CDSPUS0000' in data['plans']):
-            result = "Total Quota: Unlimited"
+        url = self.metadata_url + '/account/usage'
+        response = self.http_request(url=url,
+                                     request_type=RequestType.GET,
+                                     status_codes=status_codes,
+                                     use_access_token=True,
+                                     action_string="Get Cloud Drive Quota",
+                                     max_tries=8)
+        usage_data = json.loads(response.text)
+
+        other_usage = usage_data['other']['total']['bytes']
+        doc_usage = usage_data['doc']['total']['bytes']
+        photo_usage = usage_data['photo']['total']['bytes']
+        video_usage = usage_data['video']['total']['bytes']
+        total_usage = other_usage + doc_usage + photo_usage + video_usage
+
+        usage_result = "Documents Usage: "+self.format_bytes(doc_usage)+"\n"
+        usage_result += "Photo Usage: "+self.format_bytes(photo_usage)+"\n"
+        usage_result += "Video Usage "+self.format_bytes(video_usage)+"\n"
+        usage_result += "Other Usage: "+self.format_bytes(other_usage)+"\n"
+        usage_result += "Total Usage: "+self.format_bytes(total_usage)+"\n"
+
+        if ('plans' in quota_data and 'CDSPUS0000' in quota_data['plans']):
+            result = ("Total Quota: Unlimited\n")
+            result += usage_result
         else:
-            total_quota = data['quota']
-            remaining_quota = data['available']
+            total_quota = quota_data['quota']
+            remaining_quota = quota_data['available']
             used_quota = total_quota-remaining_quota
             percentage = float(used_quota)/total_quota*100
             result = (("Total quota: {}\n"
                        "Used quota: {}\n"
                        "Remaining Quota: {}\n"
-                       "Percentage Used {}%")
+                       "Percentage Quota Used {}%\n")
                       .format(self.format_bytes(total_quota),
                               self.format_bytes(used_quota),
                               self.format_bytes(remaining_quota),
                               float("{0:.2f}".
                               format(percentage))))
+            result += usage_result
         return result

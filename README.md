@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-04 0.1.12: Cloud Drive: Improved Quota Output.  Now lists usage for various categories, even if it doesn't use quota.
+				   Bug Fix: OneDrive: If OneDrive server reports that the fragment has already been sent, send the next one.  Will need to monitor for this rare issue to see if this can be improved upon.
+
 2015-04-04 0.1.11: Update Readme
 				   Bug Fix: Google Drive: ' filename issue should now be fixed properly.
 

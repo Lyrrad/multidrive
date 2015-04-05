@@ -338,7 +338,8 @@ class OneDriveStorageService(StorageService):
                     status_codes = (requests.codes.ok,
                                     requests.codes.created,
                                     requests.codes.accepted,
-                                    requests.codes.conflict)
+                                    requests.codes.conflict,
+                                    requests.codes.range_not_satisfiable)
                     response = self.http_request(url=data["uploadUrl"],
                                                  request_type=RequestType.PUT,
                                                  headers=headers,
@@ -352,9 +353,13 @@ class OneDriveStorageService(StorageService):
                     if response.status_code in (requests.codes.conflict,):
                         raise RuntimeError("File Already Exists")
 
+                    if response.status_code in (requests.codes.
+                                                range_not_satisfiable,):
+                        logger.info("Got error {}".format(response.text))
+                        logger.info("Proceeding to next chunk")
                     num_chunks += 1
 
-                    if num_chunks % 25 == 0:
+                    if num_chunks % 35 == 0:
                         logger.info("{} of {} bytes sent, {}% complete"
                                     .format(str(chunk_end+1),
                                             str(file_size),
