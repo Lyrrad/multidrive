@@ -68,48 +68,53 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
-2015-04-04 0.1.12: Cloud Drive: Improved Quota Output.  Now lists usage for various categories, even if it doesn't use quota.
+
+2015-04-05 0.1.13: Improved Quota Output for Google Drive and Cloud Drive.  
+				   Bug Fix: OneDrive authentication should work again.    
+				   OneDrive: Preparation for implementation of AppFolder functionality.  On hold while OneDrive API issues examined.
+
+2015-04-04 0.1.12: Cloud Drive: Improved Quota Output.  Now lists usage for various categories, even if it doesn't use quota.  
 				   Bug Fix: OneDrive: If OneDrive server reports that the fragment has already been sent, send the next one.  Will need to monitor for this rare issue to see if this can be improved upon.
 
 2015-04-04 0.1.11: Update Readme
 				   Bug Fix: Google Drive: ' filename issue should now be fixed properly.
 
-2015-04-04 0.1.10: Bug Fix: OneDrive: Fixed debug message for uploads
+2015-04-04 0.1.10: Bug Fix: OneDrive: Fixed debug message for uploads  
 				   Bug Fix: Google Drive: Uploads and queries for files with a ' in the name should now work.
 
 2015-04-04 0.1.9: New Feature: Quota for each account type can now be listed
 
-2015-04-04 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.
+2015-04-04 0.1.8: Fixed issue with downloading/listing Google Drive folders with more than 100 items.  
 				  Minor changes to debug code.
 
-2015-04-03 0.1.7: Bug Fix: Cloud Drive HTTP retry code fixed
+2015-04-03 0.1.7: Bug Fix: Cloud Drive HTTP retry code fixed  
 				  Additional OneDrive retry code added.
 
-2015-04-02 0.1.6: Additional retry code added, particularly on hash and connection failures
+2015-04-02 0.1.6: Additional retry code added, particularly on hash and connection failures  
 				  Bug Fixes
 
-2015-04-02 0.1.5: Attempt Retry on UnicodeDecodeError on Cloud Drive
-				  Fixed Retry code for OneDrive/CloudDrive
+2015-04-02 0.1.5: Attempt Retry on UnicodeDecodeError on Cloud Drive  
+				  Fixed Retry code for OneDrive/CloudDrive  
 				  Bug Fixes
 
-2015-04-01 0.1.4: Added Hash check upon upload and download to confirm files properly transferred.
+2015-04-01 0.1.4: Added Hash check upon upload and download to confirm files properly transferred.  
 				  Bug Fixes
 				  
 
-2015-04-01 0.1.3: Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.
-				  Refactored OneDrive HTTP requests for robustness.
+2015-04-01 0.1.3: Refactored Cloud Drive Service class to reduce access token requests and improve http request handling.  
+				  Refactored OneDrive HTTP requests for robustness.  
 				  Bug Fixes
 
-2015-03-31 0.1.2: Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.
+2015-03-31 0.1.2: Refactored OneDrive Service class.  It should be faster now, with less requests going to the server.  
 				  Bug Fixes
 
-2015-03-31 0.1.1: Added debug option (-b)
+2015-03-31 0.1.1: Added debug option (-b)  
 				  Bug Fixes
 
-2015-03-30 0.1.0: Changed to Python 3 to try to allow 32-bit systems to upload files greater than 4GB in size to Cloud Drive.
-				  Removed PyDrive as it is not supported in Python 3.
-				  Added new authenticaion method for Google Drive due to removal of PyDrive.  You'll need to rename the client_secrets.json file to google_drive_client_secrets.json and reauthenticate.
-				  Added prompt to acknowledge risks if malware detected by Google Drive
+2015-03-30 0.1.0: Changed to Python 3 to try to allow 32-bit systems to upload files greater than 4GB in size to Cloud Drive.  
+				  Removed PyDrive as it is not supported in Python 3.  
+				  Added new authenticaion method for Google Drive due to removal of PyDrive.  You'll need to rename the client_secrets.json file to google_drive_client_secrets.json and reauthenticate.  
+				  Added prompt to acknowledge risks if malware detected by Google Drive  
 				  Bug Fixes
 
 ## Known issues

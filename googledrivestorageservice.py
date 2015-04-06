@@ -521,7 +521,6 @@ class GoogleDriveStorageService(StorageService):
             result = "Total quota: Unlimited\n"
             result += "Used quota: {}\n"
             result += "Data in Trash: {}"
-            print((about['quotaBytesUsedAggregate']))
             used_quota = int(about['quotaBytesUsedAggregate'])
             trashed_quota = int(about['quotaBytesUsedInTrash'])
             result = (result.
@@ -544,8 +543,3 @@ class GoogleDriveStorageService(StorageService):
                               self.format_bytes(trashed_quota),
                               float("{0:.2f}".format(percentage))))
         return result
-
-
-
-
-

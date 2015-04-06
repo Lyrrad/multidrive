@@ -725,7 +725,7 @@ class CloudDriveStorageService(StorageService):
         usage_result += "Photo Usage: "+self.format_bytes(photo_usage)+"\n"
         usage_result += "Video Usage "+self.format_bytes(video_usage)+"\n"
         usage_result += "Other Usage: "+self.format_bytes(other_usage)+"\n"
-        usage_result += "Total Usage: "+self.format_bytes(total_usage)+"\n"
+        usage_result += "Total Usage: "+self.format_bytes(total_usage)
 
         if ('plans' in quota_data and 'CDSPUS0000' in quota_data['plans']):
             result = ("Total Quota: Unlimited\n")

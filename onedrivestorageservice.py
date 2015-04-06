@@ -20,7 +20,7 @@ import requests
 import json
 from dateutil.parser import parse
 import datetime
-import urllib
+import urllib.parse
 from urllib.parse import urlparse, parse_qs
 import os
 from enum import Enum
@@ -64,6 +64,7 @@ class OneDriveStorageService(StorageService):
     onedrive_url_root = "https://api.onedrive.com/v1.0"
 
     def authorize(self):
+        self.__app_folder__ = False
         logger = logging.getLogger("multidrive")
         logger.debug("Authorize OneDrive Storage Service")
 
@@ -228,9 +229,12 @@ class OneDriveStorageService(StorageService):
                       'response_type': 'code',
                       'redirect_uri':
                       'https://login.live.com/oauth20_desktop.srf'}
+        if self.__app_folder__:
+            parameters['scope'] = 'wl.offline_access onedrive.appfolder'
+
         print("Go to this URL to authorize.  Input the redirected URL: "
               "https://login.live.com/oauth20_authorize.srf?" +
-              urllib.urlencode(parameters))
+              urllib.parse.urlencode(parameters))
 
         response = input("Enter the URL you were redirected to: ")
         code = parse_qs(urlparse(response).query)['code'][0]
@@ -274,6 +278,10 @@ class OneDriveStorageService(StorageService):
         if file_size == 0:
             url = (self.onedrive_url_root+"/drive/root:/" +
                    urllib.parse.quote(full_remote_path)+":/content")
+            if self.__app_folder__:
+                url = (self.onedrive_url_root+"/drive/special/approot:/" +
+                       urllib.parse.quote(full_remote_path)+":/content")
+
             response = self.http_request(url=url,
                                          request_type=RequestType.PUT,
                                          status_codes=(requests.codes.ok,
@@ -301,6 +309,12 @@ class OneDriveStorageService(StorageService):
             url = (self.onedrive_url_root+"/drive/root:/" +
                    urllib.parse.quote(full_remote_path) +
                    ":/upload.createSession")
+
+            if self.__app_folder__:
+                url = (self.onedrive_url_root+"/drive/special/approot:/" +
+                       urllib.parse.quote(full_remote_path) +
+                       ":/upload.createSession")
+
             response = self.http_request(url=url,
                                          request_type=RequestType.POST,
                                          status_codes=(requests.codes.ok,),
@@ -340,13 +354,17 @@ class OneDriveStorageService(StorageService):
                                     requests.codes.accepted,
                                     requests.codes.conflict,
                                     requests.codes.range_not_satisfiable)
+                    # TODO: Further testing on some errors
+                    # err_codes = (requests.codes.server_error,)
                     response = self.http_request(url=data["uploadUrl"],
                                                  request_type=RequestType.PUT,
                                                  headers=headers,
                                                  status_codes=status_codes,
+                                                 # severe_status_codes=err_codes,
                                                  data=chunk_data,
                                                  use_access_token=True,
                                                  action_string="Upload Chunk")
+
                     # TODO: Check for proper response based on
                     # location in file uploading.
 
@@ -374,7 +392,10 @@ class OneDriveStorageService(StorageService):
             logger.info(response.text)
 
             data = json.loads(response.text)
-            server_hash = data['file']['hashes']['sha1Hash']
+            if ('file' in data and 'hashes' in data['file']):
+                server_hash = data['file']['hashes']['sha1Hash']
+            else:
+                server_hash = "None"
 
             logger.info("SHA1 local:"+cur_file_hash.hexdigest())
             logger.info("SHA1 remote:"+server_hash)
@@ -513,6 +534,9 @@ class OneDriveStorageService(StorageService):
 
             url = (self.onedrive_url_root+"/drive/root:/" +
                    urllib.parse.quote(item_path))
+            if self.__app_folder__:
+                url = (self.onedrive_url_root+"/drive/special/approot:/" +
+                       urllib.parse.quote(item_path))
         elif item_id is not None:
             url = self.onedrive_url_root+"/drive/items/" + item_id
         else:
@@ -565,9 +589,15 @@ class OneDriveStorageService(StorageService):
             url = ""
             if prev_path == "":
                 url = self.onedrive_url_root+"/drive/root/children"
+                if self.__app_folder__:
+                    url = (self.onedrive_url_root +
+                           "/drive/special/approot/children")
             else:
                 url = (self.onedrive_url_root+"/drive/root:/" +
                        urllib.parse.quote(prev_path)+":/children")
+                if self.__app_folder__:
+                    url = (self.onedrive_url_root+"/drive/special/approot:/" +
+                           urllib.parse.quote(prev_path)+":/children")
             logger.info("url: " + url)
 
             response = self.http_request(url=url,
@@ -609,6 +639,9 @@ class OneDriveStorageService(StorageService):
             current_path = current_path[:-1]
         url = (self.onedrive_url_root+"/drive/root:/" +
                urllib.parse.quote(current_path)+":/children")
+        if self.__app_folder__:
+            url = (self.onedrive_url_root+"/drive/special/approot:/" +
+                   urllib.parse.quote(current_path)+":/children")
 
         status_codes = (requests.codes.ok,
                         requests.codes.not_found)
@@ -626,15 +659,21 @@ class OneDriveStorageService(StorageService):
                                current_path)
 
         data = json.loads(response.text)
+
         for current_item in data['value']:
             result_list.append((current_item, path_list))
             if "folder" in current_item:
                 new_list = list(path_list)
                 new_list.append(current_item['name'])
-                result_list.extend(
-                    self.get_folder_listing(current_item, new_list,
-                                            current_path+'/' +
-                                            current_item['name']))
+                if self.__app_folder__ and len(current_path) == 0:
+                    result_list.extend(
+                        self.get_folder_listing(current_item, new_list,
+                                                current_item['name']))
+                else:
+                    result_list.extend(
+                        self.get_folder_listing(current_item, new_list,
+                                                current_path+'/' +
+                                                current_item['name']))
         return result_list
 
     def get_file_name(self, file):
