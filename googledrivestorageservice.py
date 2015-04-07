@@ -310,7 +310,7 @@ class GoogleDriveStorageService(StorageService):
         os.fsync(local_fd.fileno())
 
         if remote_hash.lower() != cur_file_hash.hexdigest():
-            raise RuntimeError("Hash of downloaded file does "
+            raise HashMismatch("Hash of downloaded file does "
                                "not match server.")
 
     def upload_file(self, file_path, folder=None, modified_time=None,

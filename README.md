@@ -68,6 +68,8 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-06 0.1.14: Bug Fix: Google Drive should now resume properly on a Hash Mismatch    
+				   
 
 2015-04-05 0.1.13: Improved Quota Output for Google Drive and Cloud Drive.  
 				   Bug Fix: OneDrive authentication should work again.    
