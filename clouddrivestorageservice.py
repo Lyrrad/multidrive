@@ -56,18 +56,19 @@ class HashFile(object):
     def set_file(self, cur_file):
         self.file = cur_file
         self.cur_file_hash = hashlib.md5()
+        self.calculate_len()
 
-    def __len__(self):
+    def calculate_len(self):
         pos = self.file.tell()
         self.file.seek(0, os.SEEK_END)
-        length = self.file.tell()-pos
+        self.len = self.file.tell()-pos
         self.file.seek(pos, os.SEEK_SET)
-        return length
 
     def read(self, *args):
         chunk = self.file.read(*args)
         if len(chunk) > 0:
             self.cur_file_hash.update(chunk)
+        self.calculate_len()
         return chunk
 
     def get_md5(self):

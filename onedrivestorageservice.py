@@ -356,7 +356,7 @@ class OneDriveStorageService(StorageService):
                                     requests.codes.range_not_satisfiable)
                     # TODO: Further testing on some errors
                     # err_codes = (requests.codes.server_error,)
-                    response = self.http_request(url=data["uploadUrl"],
+                    response = self.http_request(url=url,
                                                  request_type=RequestType.PUT,
                                                  headers=headers,
                                                  status_codes=status_codes,
@@ -374,6 +374,10 @@ class OneDriveStorageService(StorageService):
                     if response.status_code in (requests.codes.
                                                 range_not_satisfiable,):
                         logger.info("Got error {}".format(response.text))
+                        logger.info("DEBUG: Getting upload status")
+                        logger.info("Current Chunk  Start: "+chunk_start)
+                        upload_status = self.get_upload_status(url)
+                        logger.info("Status: " + str(upload_status))
                         logger.info("Proceeding to next chunk")
                     num_chunks += 1
 
@@ -412,6 +416,17 @@ class OneDriveStorageService(StorageService):
         if (cur_file_hash.hexdigest() != server_hash.lower()):
                 raise RuntimeError("Hash of uploaded file does "
                                    "not match server.")
+
+    def get_upload_status(self, url):
+        status_codes = (requests.codes.ok,)
+        r = (self. http_request(url=url,
+                                request_type=RequestType.GET,
+                                status_codes=status_codes,
+                                use_access_token=True,
+                                action_string="Get upload status",
+                                max_tries=10))
+        data = json.loads(r.text)
+        return data
 
     def download_helper(self, url, local_path):
         logger = logging.getLogger("multidrive")

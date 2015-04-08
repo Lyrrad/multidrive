@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-07 0.1.16: Bug Fix: Amazon Cloud Drive should work again on 32-bit systems for files larger than 4GiB  
+				   Added logging to better handle OneDrive upload errors.
+
 2015-04-07 0.1.15: Bug Fix: OneDrive chunk size updated. Should now work for files larger than 7.6GiB (up to 10GiB) 
 
 2015-04-06 0.1.14: Bug Fix: Google Drive should now resume properly on a Hash Mismatch    
