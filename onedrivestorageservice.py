@@ -327,7 +327,7 @@ class OneDriveStorageService(StorageService):
 
             url = data['uploadUrl']
 
-            CHUNK_SIZE = 4*1024*1024
+            CHUNK_SIZE = 10*1024*1024
             chunk_start = 0
             chunk_end = CHUNK_SIZE - 1
             if chunk_end+1 >= file_size:
@@ -377,7 +377,7 @@ class OneDriveStorageService(StorageService):
                         logger.info("Proceeding to next chunk")
                     num_chunks += 1
 
-                    if num_chunks % 35 == 0:
+                    if num_chunks % 20 == 0:
                         logger.info("{} of {} bytes sent, {}% complete"
                                     .format(str(chunk_end+1),
                                             str(file_size),
