@@ -102,7 +102,7 @@ class OneDriveStorageService(StorageService):
                      stream=False, data="", params=None,
                      severe_status_codes=(),
                      use_access_token=False, action_string="OneDrive HTTP",
-                     max_tries=6):
+                     max_tries=6, timeout=None):
         logger = logging.getLogger("multidrive")
 
         if use_access_token is True:
@@ -111,14 +111,18 @@ class OneDriveStorageService(StorageService):
         try:
             if request_type == RequestType.GET:
                 response = requests.get(url, headers=headers, params=params,
-                                        stream=stream)
+                                        stream=stream, timeout=timeout)
             elif request_type == RequestType.PUT:
                 response = requests.put(url, headers=headers, data=data,
-                                        params=params)
+                                        params=params, timeout=timeout)
             elif request_type == RequestType.POST:
-                response = requests.post(url, headers=headers, data=data)
+                response = requests.post(url, headers=headers, data=data,
+                                         timeout=timeout)
         except requests.exceptions.ConnectionError as err:
                 logger.warning("ConnectionError: {}".format(err))
+                response = None
+        except requests.exceptions.Timeout as err:
+                logger.warning("Timeout: {}".format(err))
                 response = None
 
         tries = 0
@@ -156,15 +160,24 @@ class OneDriveStorageService(StorageService):
             try:
                 if request_type == RequestType.GET:
                     response = requests.get(url, headers=headers,
-                                            params=params, stream=stream)
+                                            params=params, stream=stream,
+                                            timeout=timeout)
                 elif request_type == RequestType.PUT:
                     response = requests.put(url, headers=headers, data=data,
-                                            params=params)
+                                            params=params, timeout=timeout)
                 elif request_type == RequestType.POST:
-                    response = requests.post(url, headers=headers, data=data)
+                    response = requests.post(url, headers=headers, data=data,
+                                             timeout=timeout)
             except requests.exceptions.ConnectionError as err:
                 logger.warning("ConnectionError: {}".format(err))
                 response = None
+            except requests.exceptions.Timeout as err:
+                logger.warning("Timeout: {}".format(err))
+                response = None
+
+        if response is None:
+            logger.warning("Connection failed.")
+            raise RemoteConnectionError("Unable to complete request.")
 
         if response.status_code not in status_codes:
             logger.warning("{}: Connection failed Code: {}"
@@ -375,7 +388,7 @@ class OneDriveStorageService(StorageService):
                                                 range_not_satisfiable,):
                         logger.info("Got error {}".format(response.text))
                         logger.info("DEBUG: Getting upload status")
-                        logger.info("Current Chunk  Start: "+chunk_start)
+                        logger.info("Current Chunk  Start: "+str(chunk_start))
                         upload_status = self.get_upload_status(url)
                         logger.info("Status: " + str(upload_status))
                         logger.info("Proceeding to next chunk")
@@ -451,7 +464,8 @@ class OneDriveStorageService(StorageService):
                                       severe_status_codes=severe_status_codes,
                                       use_access_token=True,
                                       action_string="Download file",
-                                      max_tries=10))
+                                      max_tries=10,
+                                      timeout=120))
 
                     size = 0
                     cur_file_hash = hashlib.sha1()

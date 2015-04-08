@@ -68,7 +68,10 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
-2015-04-07 0.1.16: Bug Fix: Amazon Cloud Drive should work again on 32-bit systems for files larger than 4GiB  
+2015-04-08 0.1.17: Bug Fix: Fixed logging for OneDrive upload errors  
+				   Added timeout to deal with hanging OneDrive downloads.
+
+2015-04-08 0.1.16: Bug Fix: Amazon Cloud Drive should work again on 32-bit systems for files larger than 4GiB  
 				   Added logging to better handle OneDrive upload errors.
 
 2015-04-07 0.1.15: Bug Fix: OneDrive chunk size updated. Should now work for files larger than 7.6GiB (up to 10GiB) 
@@ -126,9 +129,7 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Known issues
 
-On a 32-bit system, can't upload files bigger than 4GB to Amazon Cloud Drive. It is an issue with requests-toolbelt and has been reported.  It has been fixed with this pull request: https://github.com/sigmavirus24/requests-toolbelt/pull/81
-
-An error is returned if uploading a file greater than 10GB to Amazon Cloud Drive.  A report with Amazon has been filed.  The file appears to upload properly after a short delay.
+An error may be returned if uploading a file greater than 10GB to Amazon Cloud Drive.  A report with Amazon has been filed.  The file appears to upload properly after a short delay.
 
 A possibly related issue is that downloading a file greater than 10GB is not supported from Amazon Cloud Drive.  You have to use the Desktop version of Amazon Cloud Drive (for Mac or PC), and you can only download your entire library at once.
 
@@ -136,7 +137,10 @@ A possibly related issue is that downloading a file greater than 10GB is not sup
 
 Requires the httplib2, python-dateutil, google-api-python-client, requests, and requests-toolbelt libraries.
 
+requests-toolbelt version 4.0.0 or later is required for OneDrive uploads.  This was released on 2015-04-03.
+
 google-api-python-client now supports Python 3, though it requires an updated httplib2 module not available in pip.  This can be installed from source.
+
 
 This can be installed by running:
 wget https://github.com/jcgregorio/httplib2/archive/master.zip
