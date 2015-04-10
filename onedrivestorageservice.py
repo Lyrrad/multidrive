@@ -353,9 +353,12 @@ class OneDriveStorageService(StorageService):
             num_chunks = 0
             cur_file_hash = hashlib.sha1()
             with open(file_path, "rb") as f:
+                retry_chunk = False
                 while chunk_start < file_size:
-                    chunk_data = f.read(CHUNK_SIZE)
-                    cur_file_hash.update(chunk_data)
+                    if retry_chunk is False:
+                        chunk_data = f.read(CHUNK_SIZE)
+                        cur_file_hash.update(chunk_data)
+                    retry_chunk = False
                     headers = {}
                     headers['Content-Length'] = str(file_size)
                     headers['Content-Range'] = ('bytes {}-{}/{}'.
@@ -391,7 +394,25 @@ class OneDriveStorageService(StorageService):
                         logger.info("Current Chunk  Start: "+str(chunk_start))
                         upload_status = self.get_upload_status(url)
                         logger.info("Status: " + str(upload_status))
-                        logger.info("Proceeding to next chunk")
+                        if 'nextExpectedRanges' in upload_status:
+                            new_start_range = int(upload_status
+                                                  ['nextExpectedRanges']
+                                                  [0].split("-")[0])
+                            valid_chunk = (new_start_range > chunk_start and
+                                           new_start_range < chunk_end)
+                            if (valid_chunk):
+                                difference = new_start_range-chunk_start
+                                chunk_start = new_start_range
+                                chunk_data = chunk_data[difference:]
+                                retry_chunk = True
+                                logger.info("Attempting to retry part of "
+                                            "current chunk")
+                                logger.info("new chunk start: " +
+                                            str(chunk_start))
+                                logger.info("new chunk end: "+str(chunk_end))
+                                continue
+                            break
+
                     num_chunks += 1
 
                     if num_chunks % 20 == 0:
@@ -400,7 +421,7 @@ class OneDriveStorageService(StorageService):
                                             str(file_size),
                                             str(float(chunk_end+1)
                                                 / float(file_size)*100)))
-                    chunk_start += CHUNK_SIZE
+                    chunk_start = chunk_end+1
                     chunk_end += CHUNK_SIZE
                     if chunk_end+1 >= file_size:
                         chunk_end = file_size - 1
@@ -478,7 +499,8 @@ class OneDriveStorageService(StorageService):
                             if size % 200 == 0:
                                 logger.info(str(size*4) + "MB written")
                     os.fsync(f.fileno())
-                except ConnectionResetError as err:
+                except (ConnectionResetError,
+                        requests.exceptions.ConnectionError) as err:
                     if cur_attempt < NUM_ATTEMPTS:
                         logger.warning("Connection Error: %s" % err)
                         continue

@@ -68,6 +68,8 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-08 0.1.18: OneDrive: Can now resume uploads using upload status.
+
 2015-04-08 0.1.17: Bug Fix: Fixed logging for OneDrive upload errors  
 				   Added timeout to deal with hanging OneDrive downloads.
 
