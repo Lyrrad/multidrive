@@ -102,7 +102,7 @@ class OneDriveStorageService(StorageService):
                      stream=False, data="", params=None,
                      severe_status_codes=(),
                      use_access_token=False, action_string="OneDrive HTTP",
-                     max_tries=6, timeout=None):
+                     max_tries=6, timeout=120):
         logger = logging.getLogger("multidrive")
 
         if use_access_token is True:
@@ -334,7 +334,8 @@ class OneDriveStorageService(StorageService):
                                          headers=headers,
                                          data=json.dumps(payload),
                                          use_access_token=True,
-                                         action_string="Upload",)
+                                         action_string="Upload",
+                                         timeout=120)
 
             data = json.loads(response.text)
 
@@ -379,7 +380,8 @@ class OneDriveStorageService(StorageService):
                                                  # severe_status_codes=err_codes,
                                                  data=chunk_data,
                                                  use_access_token=True,
-                                                 action_string="Upload Chunk")
+                                                 action_string="Upload Chunk",
+                                                 timeout=120)
 
                     # TODO: Check for proper response based on
                     # location in file uploading.
@@ -413,14 +415,12 @@ class OneDriveStorageService(StorageService):
                                 continue
                             break
 
-                    num_chunks += 1
-
-                    if num_chunks % 20 == 0:
-                        logger.info("{} of {} bytes sent, {}% complete"
-                                    .format(str(chunk_end+1),
-                                            str(file_size),
-                                            str(float(chunk_end+1)
-                                                / float(file_size)*100)))
+                    print("{} of {} bytes sent, {}% complete"
+                          .format(str(chunk_end+1),
+                                  str(file_size),
+                                  "%.2f" % (float(chunk_end+1)
+                                  / float(file_size)*100)),
+                          end='\r')
                     chunk_start = chunk_end+1
                     chunk_end += CHUNK_SIZE
                     if chunk_end+1 >= file_size:
@@ -438,7 +438,7 @@ class OneDriveStorageService(StorageService):
             logger.info("SHA1 local:"+cur_file_hash.hexdigest())
             logger.info("SHA1 remote:"+server_hash)
             if (cur_file_hash.hexdigest() == server_hash.lower()):
-                print("Upload of file {} complete".
+                print("\nUpload of file {} complete".
                       format(os.path.basename(file_name)))
                 return
             cur_attempt += 1
