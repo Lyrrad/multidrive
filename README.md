@@ -68,6 +68,9 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 ## Updates
 
+2015-04-12 0.1.20: Add additional debug logging.   
+                   Add version display to help message
+
 2015-04-10 0.1.19: OneDrive: Add additional timeouts and upload status messages.
 
 2015-04-09 0.1.18: OneDrive: Can now resume uploads using upload status.

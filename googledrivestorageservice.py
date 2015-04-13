@@ -299,14 +299,14 @@ class GoogleDriveStorageService(StorageService):
 
         size = 0
         cur_file_hash = hashlib.md5()
-        for chunk in response.iter_content(chunk_size=1024*1024):
+        for chunk in response.iter_content(chunk_size=5*1024*1024):
             if chunk:  # filter out keep-alive new chunks
                 cur_file_hash.update(chunk)
                 local_fd.write(chunk)
                 local_fd.flush()
                 size = size + 1
-                if size % 200 == 0:
-                    logging.info(str(size) + "MB written")
+                if size % 100 == 0:
+                    logging.info(str(size*5) + "MB written")
         os.fsync(local_fd.fileno())
 
         if remote_hash.lower() != cur_file_hash.hexdigest():

@@ -27,6 +27,7 @@ from onedrivestorageservice import OneDriveStorageService
 from clouddrivestorageservice import CloudDriveStorageService
 import tempfile
 import shutil
+from _version import __version__
 
 
 def get_storage_service(service_name):
@@ -40,7 +41,9 @@ def get_storage_service(service_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Multiple Cloud Storage '
+    parser = argparse.ArgumentParser(description='MultiDrive version ' +
+                                                 str(__version__) +
+                                                 '\nMultiple Cloud Storage '
                                                  'Operations')
     parser.add_argument('-s', '--source', nargs=1, required=True,
                         help='set primary service for this command. Valid '

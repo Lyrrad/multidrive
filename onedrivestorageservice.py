@@ -317,8 +317,6 @@ class OneDriveStorageService(StorageService):
         while cur_attempt <= NUM_ATTEMPTS:
             headers = {'Content-Type': "application/json"}
 
-            logger.warning("Payload: " + str(payload))
-
             url = (self.onedrive_url_root+"/drive/root:/" +
                    urllib.parse.quote(full_remote_path) +
                    ":/upload.createSession")
@@ -351,7 +349,6 @@ class OneDriveStorageService(StorageService):
             # TODO: Deal with insufficient Storage error (507)
             # TODO: Deal with other 400/500 series errors
 
-            num_chunks = 0
             cur_file_hash = hashlib.sha1()
             with open(file_path, "rb") as f:
                 retry_chunk = False
@@ -391,11 +388,12 @@ class OneDriveStorageService(StorageService):
 
                     if response.status_code in (requests.codes.
                                                 range_not_satisfiable,):
-                        logger.info("Got error {}".format(response.text))
-                        logger.info("DEBUG: Getting upload status")
-                        logger.info("Current Chunk  Start: "+str(chunk_start))
+                        logger.warning("Got error {}".format(response.text))
+                        logger.warning("DEBUG: Getting upload status")
+                        logger.warning("Current Chunk  Start: " +
+                                       str(chunk_start))
                         upload_status = self.get_upload_status(url)
-                        logger.info("Status: " + str(upload_status))
+                        logger.warning("Status: " + str(upload_status))
                         if 'nextExpectedRanges' in upload_status:
                             new_start_range = int(upload_status
                                                   ['nextExpectedRanges']
@@ -407,11 +405,12 @@ class OneDriveStorageService(StorageService):
                                 chunk_start = new_start_range
                                 chunk_data = chunk_data[difference:]
                                 retry_chunk = True
-                                logger.info("Attempting to retry part of "
-                                            "current chunk")
-                                logger.info("new chunk start: " +
-                                            str(chunk_start))
-                                logger.info("new chunk end: "+str(chunk_end))
+                                logger.warning("Attempting to retry part of "
+                                               "current chunk")
+                                logger.warning("new chunk start: " +
+                                               str(chunk_start))
+                                logger.warning("new chunk end: " +
+                                               str(chunk_end))
                                 continue
                             break
 
@@ -419,7 +418,7 @@ class OneDriveStorageService(StorageService):
                           .format(str(chunk_end+1),
                                   str(file_size),
                                   "%.2f" % (float(chunk_end+1)
-                                  / float(file_size)*100)),
+                                            / float(file_size)*100)),
                           end='\r')
                     chunk_start = chunk_end+1
                     chunk_end += CHUNK_SIZE
