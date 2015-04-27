@@ -11,6 +11,14 @@ This is in alpha and there may be serious bugs.  This has only been tested on Ub
 
 No API keys are provided.  You will need to sign up as a developer with each service providers to get keys.
 
+Next Planned Features:
+
+* Cleaned up debug output
+* More robust OneDrive uploads
+* Progress display for uploads and downloads.
+* More robust handling of Hash errors.
+
+
 ## Usage
 
     ./multidrive -h
@@ -48,7 +56,7 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 | | | | | |
 |**Basic File Operations**| | | | |
 |Upload File	|Yes|Yes|Yes|Pending|
-|Upload Folder	|Pending|Pending|Pending|Pending|
+|Upload Folder	|Yes|Yes|Yes|Pending|
 |Download File	|Yes|Yes|Yes|Pending|
 |Download Folder	|Yes|Yes|Yes|Pending|
 || | | | |			
@@ -67,6 +75,8 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 |Verify Files by Hash|Yes|Yes|Yes|Pending|
 
 ## Updates
+
+2015-04-27 0.1.21: Upload command now supports folder upload.
 
 2015-04-12 0.1.20: Add additional debug logging.   
                    Add version display to help message
@@ -138,7 +148,7 @@ Copies the contents of "Source Folder" on Google Drive to the "Transfers" folder
 
 An error may be returned if uploading a file greater than 10GB to Amazon Cloud Drive.  A report with Amazon has been filed.  The file appears to upload properly after a short delay.
 
-A possibly related issue is that downloading a file greater than 10GB is not supported from Amazon Cloud Drive.  You have to use the Desktop version of Amazon Cloud Drive (for Mac or PC), and you can only download your entire library at once.
+A possibly related issue is that downloading a file greater than 10GB is not supported from Amazon Cloud Drive.  It's unclear if it's currently possible to download these files.
 
 ## Requirements
 
@@ -194,7 +204,7 @@ Support for handling quota errors.
 When downloading/uploading folders, if overwrite is disabled, check to see if there are any file conflicts before starting operations
 Support keeping track of last modified time on platforms that support it (Supported for Google Drive, limited support on Amazon Cloud Drive and Microsoft OneDrive).
 Deal with Google's versions feature when overwriting files.
-Support for OneDrive's experimental upload from URL feature.  This could speed up transfers to OneDrive from other services that provide a public URL for files (Currently just Amazon cloud drive and Dropbox.
+Support for OneDrive's experimental upload from URL feature.  This could speed up transfers to OneDrive from other services that provide a public URL for files (Currently just Amazon Cloud Drive and Dropbox.
 
 ## Licence 
 

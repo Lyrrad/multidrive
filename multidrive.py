@@ -87,10 +87,43 @@ def main():
         destination = None
         if args.remote is not None:
             destination = args.remote[0]
-        service.upload(args.local[0], destination=destination,
-                       create_folder=args.createfolder,
-                       overwrite=args.overwrite)
-        pass
+        if os.path.isdir(args.local[0]):
+            if destination is not None and service.is_folder(destination) is False:
+                if args.createfolder is False:
+                    raise ValueError("Non-existant folder necessary but create folder not set.")
+                service.create_folder(destination)
+
+            base_local_path = args.local[0]
+            last_part_of_local_path = os.path.basename(os.path.normpath(base_local_path))
+            if destination is None:
+                destination = last_part_of_local_path
+            else:
+                destination = destination + '/' + last_part_of_local_path 
+            base_remote_path = destination
+            if service.is_folder(base_remote_path) is False:
+                if args.createfolder is False:
+                    raise ValueError("Non-existant folder necessary but create folder not set.")
+                service.create_folder(base_remote_path)
+            for (root, dirs, files) in os.walk(base_local_path):
+                for cur_dir in dirs:
+                    cur_remote_path = base_remote_path+root[len(base_local_path):]+"/"+cur_dir
+                    if service.is_folder(destination) is False:
+                        if args.createfolder is False:
+                            raise ValueError("Non-existant folder necessary but create folder not set.")
+                        service.create_folder(cur_remote_path)
+                for cur_file in files:
+                    service.upload(os.path.join(root, cur_file),
+                                   destination=base_remote_path+root[len(base_local_path):],
+                                   create_folder=args.createfolder,
+                                   overwrite=args.overwrite)
+
+
+
+        else:
+            service.upload(args.local[0], destination=destination,
+                           create_folder=args.createfolder,
+                           overwrite=args.overwrite)
+
     elif args.action[0].lower() == "download":
         if args.remote is None:
             raise ValueError("Please specify a remote file or folder to "
